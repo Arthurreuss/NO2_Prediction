@@ -1,0 +1,7 @@
+.venv
+pyproject.toml
+uv.log
+__pycache__/
+*DS_Store
+/data/
+test.py
