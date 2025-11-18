@@ -61,7 +61,7 @@ api_requests:
       longitude: 5.1222
 
   time:
-    start_date: 2016-01-01
+    start_date: 2016-01-02 # 2016-01-01 misses two values
     end_date: 2024-12-31
 
 
