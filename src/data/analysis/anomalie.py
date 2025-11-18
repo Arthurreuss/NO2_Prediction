@@ -1,11 +1,7 @@
-import os
-from pathlib import Path
 from typing import List, Optional, Tuple
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 
 
 def detect_outliers_zscore(
@@ -27,7 +23,6 @@ def detect_outliers_zscore(
     z = (df_num - df_num.mean()) / df_num.std(ddof=0)
     outlier_mask = z.abs() > z_thresh
 
-    # Generate summary
     total = len(df)
     counts = outlier_mask.sum()
     summary = pd.DataFrame(
@@ -68,7 +63,6 @@ def detect_outliers_iqr(
         upper = q3 + iqr_multiplier * iqr
         outlier_mask[col] = (df[col] < lower) | (df[col] > upper)
 
-    # Generate summary
     total = len(df)
     counts = outlier_mask.sum()
     summary = pd.DataFrame(

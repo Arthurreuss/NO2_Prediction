@@ -18,8 +18,8 @@ def fetch_air_quality_data(cfg: dict) -> None:
     hourly_vars = params_cfg["hourly_variables"]
     timezone = params_cfg.get("timezone", "UTC")
 
-    start_date = time_cfg["start_date"]  # e.g. "2023-01-01"
-    end_date = time_cfg["end_date"]  # e.g. "2024-01-01"
+    start_date = time_cfg["start_date"]
+    end_date = time_cfg["end_date"]
 
     out_dir = Path("data/raw/air_quality")
     out_dir.mkdir(parents=True, exist_ok=True)

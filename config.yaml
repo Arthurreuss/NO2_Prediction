@@ -53,13 +53,6 @@ api_requests:
       - aerosol_optical_depth
       - uv_index
       - uv_index_clear_sky
-      # Pollen indicators (optional)
-      # - ragweed_pollen
-      # - olive_pollen
-      # - mugwort_pollen
-      # - grass_pollen
-      # - birch_pollen
-      # - alder_pollen
     timezone: Europe/Amsterdam
 
   locations:
@@ -68,8 +61,8 @@ api_requests:
       longitude: 5.1222
 
   time:
-    start_date: 2023-01-01
-    end_date: 2024-01-01
+    start_date: 2016-01-01
+    end_date: 2024-12-31
 
 
 dataset:
@@ -77,12 +70,3 @@ dataset:
   # input_window_hours: 72
   # forecast_horizon_hours: 72
   # stride_hours: 1  
-
-
-
-
-
-
-preprocessing:
-  features:
-    - temperature
