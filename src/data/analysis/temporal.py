@@ -1,11 +1,6 @@
-import os
-from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import seaborn as sns
 
 
 def diurnal_profile(
@@ -16,13 +11,6 @@ def diurnal_profile(
     """
     Compute average diurnal (hour-of-day) profile for selected columns.
     """
-    if time_col not in df.columns:
-        raise ValueError(f"time_col '{time_col}' not found in DataFrame.")
-    if not np.issubdtype(df[time_col].dtype, np.datetime64):
-        raise TypeError(f"{time_col} must be datetime64 dtype.")
-
-    if cols is None:
-        cols = df.select_dtypes(include=[np.number]).columns.tolist()
 
     tmp = df.copy()
     tmp["hour"] = tmp[time_col].dt.hour
@@ -42,13 +30,6 @@ def weekly_profile(
     Compute average weekly (day-of-week) profile for selected columns.
     Monday=0, Sunday=6.
     """
-    if time_col not in df.columns:
-        raise ValueError(f"time_col '{time_col}' not found in DataFrame.")
-    if not np.issubdtype(df[time_col].dtype, np.datetime64):
-        raise TypeError(f"{time_col} must be datetime64 dtype.")
-
-    if cols is None:
-        cols = df.select_dtypes(include=[np.number]).columns.tolist()
 
     tmp = df.copy()
     tmp["dayofweek"] = tmp[time_col].dt.dayofweek

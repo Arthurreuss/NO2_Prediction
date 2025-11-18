@@ -1,15 +1,9 @@
-import os
-from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-
-# ---------------------------------------------------------------------
-# 3. Correlations
-# ---------------------------------------------------------------------
 
 
 def compute_correlation_matrix(
