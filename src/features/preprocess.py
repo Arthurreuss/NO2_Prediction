@@ -1,4 +1,5 @@
 import os
+from pdb import run
 from typing import Dict, List, Optional
 
 import joblib
@@ -7,6 +8,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 from src.data.api_requests import fetch_air_quality_data, fetch_weather_data
+from src.features.schema import run_full_integrity_check
 
 
 class PreProcessingPipeline:
@@ -189,7 +191,10 @@ class PreProcessingPipeline:
             ]
         )
 
+        run_full_integrity_check(self.df)
+
         self.split_data()
+
         self.normalize_data()
         self.save_preprocessed_data("data/processed")
 
