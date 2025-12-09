@@ -1,4 +1,4 @@
-api_requests:
+api_requests: # use of all the data for the analysis
   weather_api_base_url: https://archive-api.open-meteo.com/v1/archive
   air_quality_api_base_url: https://air-quality-api.open-meteo.com/v1/air-quality
 
@@ -73,36 +73,23 @@ data:
   feature_cols:
     - temperature_2m
     - relative_humidity_2m
-    - dew_point_2m
     - precipitation
     - pressure_msl
-    - cloud_cover_high
-    - et0_fao_evapotranspiration
-    - vapour_pressure_deficit
     - wind_speed_10m
-    - wind_gusts_10m
-    - pm10
-    - pm2_5
-    - carbon_monoxide
-    - nitrogen_dioxide
-    - sulphur_dioxide
-    - ozone
-    - hour_sin
-    - hour_cos
-    - dayofweek_sin
-    - dayofweek_cos
-    - month_sin
-    - month_cos
     - wind_dir_10m_sin
     - wind_dir_10m_cos
+    - pm10
+    - pm2_5
+    - ozone
+    - nitrogen_dioxide
+
+  target_col: nitrogen_dioxide
 
   target_cols:
     - nitrogen_dioxide
     - ozone
     - pm10
     - pm2_5
-
-  target_col: "nitrogen_dioxide"
 
   input_length: 168
   horizon: 24
