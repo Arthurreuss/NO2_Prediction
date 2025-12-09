@@ -1,5 +1,3 @@
-from typing import Callable
-
 import torch
 from torch.utils.data import DataLoader
 
@@ -11,7 +9,7 @@ def evaluate_persistence(
     dataloader: DataLoader,
     model,
     horizon: int,
-    device: str,
+    device: str = "cpu",
 ) -> dict:
     y_true_all = []
     y_pred_all = []
