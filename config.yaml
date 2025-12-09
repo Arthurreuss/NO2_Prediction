@@ -1,0 +1,72 @@
+api_requests:
+  weather_api_base_url: https://archive-api.open-meteo.com/v1/archive
+  air_quality_api_base_url: https://air-quality-api.open-meteo.com/v1/air-quality
+
+  weather_params:
+    hourly_variables:
+      - temperature_2m
+      - relative_humidity_2m
+      - dew_point_2m
+      - apparent_temperature
+      - precipitation
+      - rain
+      - snowfall
+      - snow_depth
+      - weather_code
+      - pressure_msl
+      - surface_pressure
+      - cloud_cover
+      - cloud_cover_low
+      - cloud_cover_mid
+      - cloud_cover_high
+      - et0_fao_evapotranspiration
+      - vapour_pressure_deficit
+      - wind_speed_10m
+      - wind_speed_100m
+      - wind_direction_10m
+      - wind_direction_100m
+      - wind_gusts_10m
+      - soil_temperature_0_to_7cm
+      - soil_temperature_7_to_28cm
+      - soil_temperature_28_to_100cm
+      - soil_temperature_100_to_255cm
+      - soil_moisture_0_to_7cm
+      - soil_moisture_7_to_28cm
+      - soil_moisture_28_to_100cm
+      - soil_moisture_100_to_255cm
+    timezone: Europe/Amsterdam
+    temperature_unit: celsius
+    wind_speed_unit: kmh
+    precipitation_unit: mm
+
+  air_quality_params:
+    hourly_variables:
+      - pm10
+      - pm2_5
+      - carbon_monoxide
+      - carbon_dioxide
+      - nitrogen_dioxide
+      - sulphur_dioxide
+      - ozone
+      - ammonia
+      - methane
+      - aerosol_optical_depth
+      - uv_index
+      - uv_index_clear_sky
+    timezone: Europe/Amsterdam
+
+  locations:
+    utrecht:
+      latitude: 52.0908
+      longitude: 5.1222
+
+  time:
+    start_date: 2016-01-02 # 2016-01-01 misses two values
+    end_date: 2024-12-31
+
+
+dataset:
+  target_pollutant: NO2  # name after renaming
+  # input_window_hours: 72
+  # forecast_horizon_hours: 72
+  # stride_hours: 1  

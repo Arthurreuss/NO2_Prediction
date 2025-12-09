@@ -1,0 +1,40 @@
+from typing import List, Optional
+
+import pandas as pd
+
+
+def diurnal_profile(
+    df: pd.DataFrame,
+    time_col: str = "time",
+    cols: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """
+    Compute average diurnal (hour-of-day) profile for selected columns.
+    """
+
+    tmp = df.copy()
+    tmp["hour"] = tmp[time_col].dt.hour
+    profile = tmp.groupby("hour")[cols].mean()
+
+    print("=== Diurnal profile (mean by hour of day) ===")
+    print(profile)
+    return profile
+
+
+def weekly_profile(
+    df: pd.DataFrame,
+    time_col: str = "time",
+    cols: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    """
+    Compute average weekly (day-of-week) profile for selected columns.
+    Monday=0, Sunday=6.
+    """
+
+    tmp = df.copy()
+    tmp["dayofweek"] = tmp[time_col].dt.dayofweek
+    profile = tmp.groupby("dayofweek")[cols].mean()
+
+    print("=== Weekly profile (mean by day of week, Mon=0) ===")
+    print(profile)
+    return profile
