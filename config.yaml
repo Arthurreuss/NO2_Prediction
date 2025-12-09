@@ -65,8 +65,54 @@ api_requests:
     end_date: 2024-12-31
 
 
-dataset:
-  target_pollutant: NO2  # name after renaming
-  # input_window_hours: 72
-  # forecast_horizon_hours: 72
-  # stride_hours: 1  
+data:
+  train_path: "data/processed/train.parquet"
+  val_path: "data/processed/val.parquet"
+  test_path: "data/processed/test.parquet"
+
+  feature_cols:
+    - temperature_2m
+    - relative_humidity_2m
+    - dew_point_2m
+    - precipitation
+    - pressure_msl
+    - cloud_cover_high
+    - et0_fao_evapotranspiration
+    - vapour_pressure_deficit
+    - wind_speed_10m
+    - wind_gusts_10m
+    - pm10
+    - pm2_5
+    - carbon_monoxide
+    - nitrogen_dioxide
+    - sulphur_dioxide
+    - ozone
+    - hour_sin
+    - hour_cos
+    - dayofweek_sin
+    - dayofweek_cos
+    - month_sin
+    - month_cos
+    - wind_dir_10m_sin
+    - wind_dir_10m_cos
+
+  target_cols:
+    - nitrogen_dioxide
+    - ozone
+    - pm10
+    - pm2_5
+
+  target_col: "nitrogen_dioxide"
+
+  input_length: 168
+  horizon: 24
+  scaler_path: "data/processed/scaler.pkl"
+
+training:
+  batch_size: 128
+  num_epochs: 50
+  lr: 0.001
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  patience: 5
+  device: "auto"
