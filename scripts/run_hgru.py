@@ -1,6 +1,8 @@
 from pathlib import Path
 
 import joblib
+import mlflow
+import mlflow.pytorch
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -18,6 +20,8 @@ from src.utils.train_gru import evaluate_model, train_one_epoch
 def main():
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
+
+    mlflow.set_experiment("NO2_Forecasting")
 
     device = get_device(cfg["training"].get("device", "auto"))
     print(f"[run_hgru] Using device: {device}")
@@ -88,101 +92,139 @@ def main():
     best_val_rmse = float("inf")
     epochs_no_improve = 0
 
-    for epoch in range(cfg["training"]["num_epochs"]):
-        train_loss = train_one_epoch(
-            model,
-            train_loader,
-            optimizer,
-            loss_fn,
-            device=device,
-            grad_clip=grad_clip,
-        )
+    with mlflow.start_run(run_name="HGRU_reduced_features"):
+        # log configuration / hyperparameters
+        mlflow.log_param("model_type", "HGRU")
+        mlflow.log_param("shared_hidden_size", 32)
+        mlflow.log_param("branch_hidden_size", 16)
+        mlflow.log_param("num_layers", 1)
+        mlflow.log_param("dropout", 0.2)
+        mlflow.log_param("horizon", horizon)
+        mlflow.log_param("input_length", input_length)
+        mlflow.log_param("lr", lr)
+        mlflow.log_param("weight_decay", weight_decay)
+        mlflow.log_param("grad_clip", grad_clip)
+        mlflow.log_param("features", ",".join(feature_cols))
+        mlflow.log_param("target_cols", ",".join(target_cols))
+        mlflow.log_param("device", str(device))
 
-        val_metrics = evaluate_model(
-            model,
-            val_loader,
-            loss_fn,
-            device=device,
-            scaler=None,
-        )
+        for epoch in range(cfg["training"]["num_epochs"]):
+            train_loss = train_one_epoch(
+                model,
+                train_loader,
+                optimizer,
+                loss_fn,
+                device=device,
+                grad_clip=grad_clip,
+            )
 
-        # add denormalized NO2-only metric for comparison
+            # multi-target normalized metrics
+            val_metrics = evaluate_model(
+                model,
+                val_loader,
+                loss_fn,
+                device=device,
+                scaler=None,  # we handle denorm for NO2 manually below
+            )
+
+            # denormalized NO2-only metrics
+            with torch.no_grad():
+                y_true_all, y_pred_all = [], []
+                for x, y in val_loader:
+                    x = x.to(device)
+                    y = y.to(device)
+                    y_hat = model(x)
+                    y_true_all.append(y.cpu())  # [B, H, T]
+                    y_pred_all.append(y_hat.cpu())
+
+                y_true = torch.cat(y_true_all, dim=0)  # [N, H, T]
+                y_pred = torch.cat(y_pred_all, dim=0)
+
+                no2_col = "nitrogen_dioxide"
+                t_idx = target_cols.index(no2_col)
+
+                y_true_no2 = y_true[..., t_idx]  # [N, H]
+                y_pred_no2 = y_pred[..., t_idx]  # [N, H]
+
+                y_true_no2_den = inverse_target(
+                    scaler, y_true_no2, numeric_cols, no2_col
+                )
+                y_pred_no2_den = inverse_target(
+                    scaler, y_pred_no2, numeric_cols, no2_col
+                )
+
+                val_rmse_no2 = rmse(y_true_no2_den, y_pred_no2_den)
+                val_smape_no2 = smape(y_true_no2_den, y_pred_no2_den)
+
+            print(
+                f"Epoch {epoch+1}, "
+                f"train_loss={train_loss:.4f}, "
+                f"val_loss={val_metrics['loss']:.4f}, "
+                f"val_rmse_norm={val_metrics['rmse_norm']:.4f}, "
+                f"val_smape_norm={val_metrics['smape_norm']:.2f}, "
+                f"val_rmse_no2={val_rmse_no2:.4f}, "
+                f"val_smape_no2={val_smape_no2:.2f}"
+            )
+
+            # MLflow: log metrics
+            mlflow.log_metric("train_loss", train_loss, step=epoch)
+            mlflow.log_metric("val_loss", val_metrics["loss"], step=epoch)
+            mlflow.log_metric("val_rmse_norm", val_metrics["rmse_norm"], step=epoch)
+            mlflow.log_metric("val_smape_norm", val_metrics["smape_norm"], step=epoch)
+            mlflow.log_metric("val_rmse_no2", float(val_rmse_no2), step=epoch)
+            mlflow.log_metric("val_smape_no2", float(val_smape_no2), step=epoch)
+
+            current_rmse = float(val_rmse_no2)
+            if current_rmse < best_val_rmse:
+                best_val_rmse = current_rmse
+                torch.save(model.state_dict(), best_model_path)
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+
+            if epochs_no_improve >= patience:
+                print(f"[run_hgru] Early stopping after {epoch+1} epochs.")
+                break
+
+        # Test evaluation with best model
+        model.load_state_dict(torch.load(best_model_path, map_location=device))
+
         with torch.no_grad():
             y_true_all, y_pred_all = [], []
-            for x, y in val_loader:
+            for x, y in test_loader:
                 x = x.to(device)
                 y = y.to(device)
                 y_hat = model(x)
-                y_true_all.append(y.cpu())  # [B,H,T]
+                y_true_all.append(y.cpu())
                 y_pred_all.append(y_hat.cpu())
 
-            y_true = torch.cat(y_true_all, dim=0)  # [N,H,T]
+            y_true = torch.cat(y_true_all, dim=0)
             y_pred = torch.cat(y_pred_all, dim=0)
 
             no2_col = "nitrogen_dioxide"
             t_idx = target_cols.index(no2_col)
 
-            y_true_no2 = y_true[..., t_idx]  # [N,H]
-            y_pred_no2 = y_pred[..., t_idx]  # [N,H]
+            y_true_no2 = y_true[..., t_idx]
+            y_pred_no2 = y_pred[..., t_idx]
 
             y_true_no2_den = inverse_target(scaler, y_true_no2, numeric_cols, no2_col)
             y_pred_no2_den = inverse_target(scaler, y_pred_no2, numeric_cols, no2_col)
 
-            val_rmse_no2 = rmse(y_true_no2_den, y_pred_no2_den)
-            val_smape_no2 = smape(y_true_no2_den, y_pred_no2_den)
+            test_rmse_no2 = rmse(y_true_no2_den, y_pred_no2_den)
+            test_smape_no2 = smape(y_true_no2_den, y_pred_no2_den)
 
         print(
-            f"Epoch {epoch+1}, "
-            f"train_loss={train_loss:.4f}, "
-            f"val_loss={val_metrics['loss']:.4f}, "
-            f"val_rmse_norm={val_metrics['rmse_norm']:.4f}, "
-            f"val_smape_norm={val_metrics['smape_norm']:.2f}, "
-            f"val_rmse_no2={val_rmse_no2:.4f}, "
-            f"val_smape_no2={val_smape_no2:.2f}"
+            "[run_hgru] Test NO2:",
+            {"rmse": test_rmse_no2, "smape": test_smape_no2},
         )
 
-        current_rmse = val_rmse_no2
-        if current_rmse < best_val_rmse:
-            best_val_rmse = current_rmse
-            torch.save(model.state_dict(), best_model_path)
-            epochs_no_improve = 0
-        else:
-            epochs_no_improve += 1
+        # log test metrics
+        mlflow.log_metric("test_rmse_no2", float(test_rmse_no2))
+        mlflow.log_metric("test_smape_no2", float(test_smape_no2))
 
-        if epochs_no_improve >= patience:
-            print(f"[run_hgru] Early stopping after {epoch+1} epochs.")
-            break
-
-    model.load_state_dict(torch.load(best_model_path, map_location=device))
-
-    with torch.no_grad():
-        y_true_all, y_pred_all = [], []
-        for x, y in test_loader:
-            x = x.to(device)
-            y = y.to(device)
-            y_hat = model(x)
-            y_true_all.append(y.cpu())
-            y_pred_all.append(y_hat.cpu())
-
-        y_true = torch.cat(y_true_all, dim=0)
-        y_pred = torch.cat(y_pred_all, dim=0)
-
-        no2_col = "nitrogen_dioxide"
-        t_idx = target_cols.index(no2_col)
-
-        y_true_no2 = y_true[..., t_idx]
-        y_pred_no2 = y_pred[..., t_idx]
-
-        y_true_no2_den = inverse_target(scaler, y_true_no2, numeric_cols, no2_col)
-        y_pred_no2_den = inverse_target(scaler, y_pred_no2, numeric_cols, no2_col)
-
-        test_rmse_no2 = rmse(y_true_no2_den, y_pred_no2_den)
-        test_smape_no2 = smape(y_true_no2_den, y_pred_no2_den)
-
-    print(
-        "[run_hgru] Test NO2:",
-        {"rmse": test_rmse_no2, "smape": test_smape_no2},
-    )
+        # optional: log model + config as artifacts
+        mlflow.pytorch.log_model(model, name="hgru_model")
+        mlflow.log_artifact("config.yaml")
 
 
 if __name__ == "__main__":
