@@ -92,10 +92,13 @@ data:
     - pm2_5
 
   input_length: 168
-  horizon: 24
+  horizon: 6
   scaler_path: "data/processed/scaler.pkl"
 
 training:
+  mlflow:
+    experiment_name: NO2_Forecasting
+    run_postfix: short_horizon
   batch_size: 128
   num_epochs: 50
   lr: 0.001

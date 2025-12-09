@@ -10,7 +10,9 @@ def main():
     with open("config.yaml", "r") as f:
         cfg = yaml.safe_load(f)
 
-    mlflow.set_experiment("NO2_Forecasting")
+    mlflow_cfg = cfg["training"]["mlflow"]
+
+    mlflow.set_experiment(mlflow_cfg["experiment_name"])
 
     data_cfg = cfg["data"]
     train_path = data_cfg["train_path"]

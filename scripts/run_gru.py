@@ -18,7 +18,9 @@ def main():
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
 
-    mlflow.set_experiment("NO2_Forecasting")
+    mlflow_cfg = cfg["training"]["mlflow"]
+
+    mlflow.set_experiment(mlflow_cfg["experiment_name"])
 
     device = get_device(cfg["training"].get("device", "auto"))
     print(f"[run_gru] Using device: {device}")
@@ -90,7 +92,7 @@ def main():
     best_val_rmse = float("inf")
     epochs_no_improve = 0
 
-    with mlflow.start_run(run_name="GRU_reduced_features"):
+    with mlflow.start_run(run_name=f"GRU_{mlflow_cfg['run_postfix']}"):
         # log configuration / hyperparameters
         mlflow.log_param("model_type", "GRU")
         mlflow.log_param("hidden_size", 32)
@@ -169,12 +171,10 @@ def main():
         )
         print("[run_gru] Test metrics:", test_metrics)
 
-        # log test metrics
         for k, v in test_metrics.items():
             mlflow.log_metric(f"test_{k}", float(v))
 
-        # optional: log model + config as artifacts
-        mlflow.pytorch.log_model(model, artifact_path="gru_model")
+        mlflow.pytorch.log_model(model, name="gru_model")
         mlflow.log_artifact("config.yaml")
 
 

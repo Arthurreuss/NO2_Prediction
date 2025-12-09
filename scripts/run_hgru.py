@@ -21,7 +21,8 @@ def main():
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
 
-    mlflow.set_experiment("NO2_Forecasting")
+    mlflow_cfg = cfg["training"]["mlflow"]
+    mlflow.set_experiment(mlflow_cfg["experiment_name"])
 
     device = get_device(cfg["training"].get("device", "auto"))
     print(f"[run_hgru] Using device: {device}")
@@ -92,7 +93,7 @@ def main():
     best_val_rmse = float("inf")
     epochs_no_improve = 0
 
-    with mlflow.start_run(run_name="HGRU_reduced_features"):
+    with mlflow.start_run(run_name=f"HGRU_{mlflow_cfg['run_postfix']}"):
         # log configuration / hyperparameters
         mlflow.log_param("model_type", "HGRU")
         mlflow.log_param("shared_hidden_size", 32)
@@ -118,16 +119,14 @@ def main():
                 grad_clip=grad_clip,
             )
 
-            # multi-target normalized metrics
             val_metrics = evaluate_model(
                 model,
                 val_loader,
                 loss_fn,
                 device=device,
-                scaler=None,  # we handle denorm for NO2 manually below
+                scaler=None,
             )
 
-            # denormalized NO2-only metrics
             with torch.no_grad():
                 y_true_all, y_pred_all = [], []
                 for x, y in val_loader:
