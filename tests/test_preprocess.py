@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.features.preprocess import PreProcessingPipeline
+from scripts.preprocess import PreProcessingPipeline
 from src.features.schema import run_full_integrity_check
 
 

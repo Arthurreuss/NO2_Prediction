@@ -64,7 +64,6 @@ api_requests: # use of all the data for the analysis
     start_date: 2016-01-02 # 2016-01-01 misses two values
     end_date: 2024-12-31
 
-
 data:
   train_path: "data/processed/train.parquet"
   val_path: "data/processed/val.parquet"
@@ -94,6 +93,17 @@ data:
   input_length: 168
   horizon: 6
   scaler_path: "data/processed/scaler.pkl"
+
+
+models:
+  hgru:
+    downsample_factor: 24
+    short_hidden_size: 64
+    long_hidden_size: 32
+    num_layers_short: 1
+    num_layers_long: 1
+    dropout: 0.3
+
 
 training:
   mlflow:
