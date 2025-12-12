@@ -1,5 +1,3 @@
-# src/utils/eval.py
-import numpy as np
 import torch
 
 from src.utils.scale import inverse_target
@@ -30,7 +28,6 @@ def evaluate_persistence(
     y_true = torch.cat(y_true_all, dim=0)  # [N, H]
     y_pred = torch.cat(y_pred_all, dim=0)  # [N, H]
 
-    # Denormalize if requested
     if scaler is not None:
         if numeric_cols is None or target_col is None:
             raise ValueError(
@@ -39,7 +36,6 @@ def evaluate_persistence(
         y_true = inverse_target(scaler, y_true, numeric_cols, target_col)
         y_pred = inverse_target(scaler, y_pred, numeric_cols, target_col)
 
-    # Metrics in torch -> float
     rmse = torch.sqrt(torch.mean((y_pred - y_true) ** 2)).item()
 
     denom = (torch.abs(y_true) + torch.abs(y_pred)) / 2.0

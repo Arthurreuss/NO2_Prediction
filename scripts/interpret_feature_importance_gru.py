@@ -34,13 +34,12 @@ def main():
         shuffle=False,
     )
 
-    # load trained GRU
     results_dir = Path("results")
     model_path = results_dir / "gru_best_trial_14.pt"
 
     model = GRUForecast(
         input_size=len(feature_cols),
-        hidden_size=112,  # must match training config
+        hidden_size=112,
         num_layers=1,
         horizon=horizon,
         dropout=0.38,

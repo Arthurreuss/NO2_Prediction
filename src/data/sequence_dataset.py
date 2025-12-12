@@ -20,7 +20,7 @@ class TimeSeriesWindowDataset(Dataset):
         target_col: str,
         input_length: int,
         horizon: int,
-        group_col: Optional[str] = "location",  # to keep sequences per location
+        group_col: Optional[str] = "location",
     ) -> None:
         self.feature_cols = feature_cols
         self.target_col = target_col
@@ -28,13 +28,11 @@ class TimeSeriesWindowDataset(Dataset):
         self.horizon = horizon
         self.group_col = group_col
 
-        # sort by group + time to ensure temporal ordering
         sort_cols = [c for c in [group_col, "time"] if c in df.columns]
         df = df.sort_values(sort_cols).reset_index(drop=True)
 
         self.df = df
 
-        # pre-compute window start indices
         self.indices = self._compute_indices()
 
     def _compute_indices(self):
@@ -45,7 +43,6 @@ class TimeSeriesWindowDataset(Dataset):
                 max_start = n - (self.input_length + self.horizon) + 1
                 if max_start <= 0:
                     continue
-                # local indices within this group
                 base = g.index[0]
                 for s in range(max_start):
                     idxs.append(base + s)

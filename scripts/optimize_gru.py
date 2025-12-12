@@ -31,7 +31,6 @@ def build_context(config_path: str = "config.yaml") -> dict:
     input_length = data_cfg["input_length"]
     horizon = data_cfg["horizon"]
 
-    # Train/val loaders (Optuna uses validation as objective; test is for final model)
     train_loader = make_dataloader(
         data_cfg["train_path"],
         feature_cols,
@@ -51,7 +50,6 @@ def build_context(config_path: str = "config.yaml") -> dict:
         shuffle=False,
     )
 
-    # Scaler + numeric columns (for de-normalized metrics)
     scaler_path = data_cfg.get("scaler_path")
     scaler = joblib.load(scaler_path) if scaler_path is not None else None
 
@@ -103,7 +101,6 @@ def objective(trial: optuna.Trial, ctx: dict) -> float:
     numeric_cols = ctx["numeric_cols"]
     results_dir = ctx["results_dir"]
 
-    # --- Hyperparameter search space ---
     hidden_size = trial.suggest_int("hidden_size", 16, 128, step=16)
     dropout = trial.suggest_float("dropout", 0.0, 0.5)
     lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
@@ -113,7 +110,6 @@ def objective(trial: optuna.Trial, ctx: dict) -> float:
     patience = int(cfg["training"].get("patience", 5))
     num_epochs = int(cfg["training"]["num_epochs"])
 
-    # Fresh model + optimizer per trial
     model = GRUForecast(
         input_size=len(feature_cols),
         hidden_size=hidden_size,
@@ -129,11 +125,10 @@ def objective(trial: optuna.Trial, ctx: dict) -> float:
     best_val_rmse = float("inf")
     epochs_no_improve = 0
 
-    experiment_name = "GRU_Optimization_Optuna"
+    experiment_name = "GRU_Optimization_Optuna_h72"
     mlflow.set_experiment(experiment_name)
 
     with mlflow.start_run(run_name=f"GRU_optuna_t{trial.number}"):
-        # log hyperparameters
         mlflow.log_param("model_type", "GRU")
         mlflow.log_param("hidden_size", hidden_size)
         mlflow.log_param("num_layers", 1)
@@ -167,7 +162,6 @@ def objective(trial: optuna.Trial, ctx: dict) -> float:
                 target_col=target_col,
             )
 
-            # choose denormalized RMSE if available, otherwise normalized
             current_rmse = float(val_metrics.get("rmse", val_metrics["rmse_norm"]))
 
             print(
@@ -180,7 +174,6 @@ def objective(trial: optuna.Trial, ctx: dict) -> float:
                 f"val_smape={val_metrics.get('smape', float('nan')):.2f}"
             )
 
-            # log metrics
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             mlflow.log_metric("val_loss", val_metrics["loss"], step=epoch)
             mlflow.log_metric("val_rmse_norm", val_metrics["rmse_norm"], step=epoch)
@@ -190,7 +183,6 @@ def objective(trial: optuna.Trial, ctx: dict) -> float:
             if "smape" in val_metrics:
                 mlflow.log_metric("val_smape", val_metrics["smape"], step=epoch)
 
-            # early stopping on (de-)normalized RMSE
             if current_rmse < best_val_rmse:
                 best_val_rmse = current_rmse
                 torch.save(model.state_dict(), best_model_path)
@@ -198,7 +190,6 @@ def objective(trial: optuna.Trial, ctx: dict) -> float:
             else:
                 epochs_no_improve += 1
 
-            # report to Optuna (for pruning etc.)
             trial.report(best_val_rmse, step=epoch)
             if trial.should_prune():
                 print(f"[trial {trial.number}] Pruned at epoch {epoch+1}")
@@ -222,7 +213,7 @@ def main():
 
     opt_cfg = cfg["training"].get("optuna", {})
     n_trials = int(opt_cfg.get("n_trials", 20))
-    timeout = opt_cfg.get("timeout", None)  # seconds or None
+    timeout = opt_cfg.get("timeout", None)
     study_name = opt_cfg.get("study_name", "gru_optuna_study")
 
     study = optuna.create_study(

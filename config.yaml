@@ -91,7 +91,7 @@ data:
     - pm2_5
 
   input_length: 168
-  horizon: 6
+  horizon: 72
   scaler_path: "data/processed/scaler.pkl"
 
 

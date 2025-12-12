@@ -72,10 +72,10 @@ def main():
         input_size=input_size,
         target_cols=target_cols,
         horizon=horizon,
-        shared_hidden_size=32,
-        branch_hidden_size=16,
+        shared_hidden_size=112,
+        branch_hidden_size=64,
         num_layers=1,
-        dropout=0.2,
+        dropout=0.44,
     ).to(device)
 
     lr = float(cfg["training"]["lr"])
@@ -94,7 +94,6 @@ def main():
     epochs_no_improve = 0
 
     with mlflow.start_run(run_name=f"Multi_GRU_{mlflow_cfg['run_postfix']}"):
-        # log configuration / hyperparameters
         mlflow.log_param("model_type", "Multi GRU")
         mlflow.log_param("shared_hidden_size", 32)
         mlflow.log_param("branch_hidden_size", 16)
@@ -165,7 +164,6 @@ def main():
                 f"val_smape_no2={val_smape_no2:.2f}"
             )
 
-            # MLflow: log metrics
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             mlflow.log_metric("val_loss", val_metrics["loss"], step=epoch)
             mlflow.log_metric("val_rmse_norm", val_metrics["rmse_norm"], step=epoch)
@@ -185,7 +183,6 @@ def main():
                 print(f"[run_multi_gru] Early stopping after {epoch+1} epochs.")
                 break
 
-        # Test evaluation with best model
         model.load_state_dict(torch.load(best_model_path, map_location=device))
 
         with torch.no_grad():
@@ -217,11 +214,9 @@ def main():
             {"rmse": test_rmse_no2, "smape": test_smape_no2},
         )
 
-        # log test metrics
         mlflow.log_metric("test_rmse_no2", float(test_rmse_no2))
         mlflow.log_metric("test_smape_no2", float(test_smape_no2))
 
-        # optional: log model + config as artifacts
         mlflow.pytorch.log_model(model, name="multi_gru_model")
         mlflow.log_artifact("config.yaml")
 

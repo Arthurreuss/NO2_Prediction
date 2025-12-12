@@ -36,7 +36,6 @@ class HierarchicalGRUForecast(nn.Module):
         self.horizon = horizon
         self.downsample_factor = downsample_factor
 
-        # Short-term GRU over full hourly sequence
         self.short_gru = nn.GRU(
             input_size=input_size,
             hidden_size=short_hidden_size,
@@ -45,7 +44,6 @@ class HierarchicalGRUForecast(nn.Module):
             dropout=dropout if num_layers_short > 1 else 0.0,
         )
 
-        # Long-term GRU over downsampled (e.g. daily) sequence
         self.long_gru = nn.GRU(
             input_size=short_hidden_size,
             hidden_size=long_hidden_size,
@@ -54,7 +52,6 @@ class HierarchicalGRUForecast(nn.Module):
             dropout=dropout if num_layers_long > 1 else 0.0,
         )
 
-        # Decoder: from long-term final hidden state to horizon x targets
         self.decoder = nn.Sequential(
             nn.Linear(long_hidden_size, long_hidden_size),
             nn.ReLU(),
@@ -77,14 +74,11 @@ class HierarchicalGRUForecast(nn.Module):
         k = self.downsample_factor
 
         if L < k:
-            # Not enough steps to downsample -> treat as single coarse step
             return h_seq.mean(dim=1, keepdim=True)  # [B, 1, Hs]
 
-        # Trim to multiple of k
         L_trim = (L // k) * k
         h_trim = h_seq[:, :L_trim, :]  # [B, L_trim, Hs]
 
-        # Reshape to [B, L_coarse, k, Hs] and mean over k
         L_coarse = L_trim // k
         h_trim = h_trim.view(B, L_coarse, k, Hs)
         h_coarse = h_trim.mean(dim=2)  # [B, L_coarse, Hs]
@@ -99,22 +93,17 @@ class HierarchicalGRUForecast(nn.Module):
         Returns:
             y_hat: [B, horizon, T]
         """
-        # Short-term GRU over hourly sequence
         short_out, _ = self.short_gru(x)  # [B, L, H_short]
 
-        # Downsample in time to coarse sequence
         coarse_seq = self._downsample_hidden(short_out)  # [B, L_coarse, H_short]
 
-        # Long-term GRU over coarse sequence
         long_out, long_hn = self.long_gru(
             coarse_seq
         )  # long_hn: [num_layers_long, B, H_long]
 
-        # Use last layer's final hidden state as global representation
         # long_hn[-1]: [B, H_long]
         h_final = long_hn[-1]  # [B, H_long]
 
-        # Decode to horizon * n_targets and reshape
         dec = self.decoder(h_final)  # [B, horizon * T]
         y_hat = dec.view(-1, self.horizon, self.n_targets)  # [B, H, T]
 

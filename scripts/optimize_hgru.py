@@ -146,9 +146,7 @@ def objective(trial: optuna.Trial) -> float:
     best_val_rmse = float("inf")
     epochs_no_improve = 0
 
-    # Each trial = one MLflow run
     with mlflow.start_run(run_name=f"HierHGRU_optuna_t{trial.number}", nested=True):
-        # Log static params
         mlflow.log_param("model_type", "HierarchicalHGRU")
         mlflow.log_param("input_length", input_length)
         mlflow.log_param("horizon", horizon)
@@ -159,12 +157,10 @@ def objective(trial: optuna.Trial) -> float:
         mlflow.log_param("weight_decay", weight_decay)
         mlflow.log_param("grad_clip", grad_clip)
 
-        # Log architecture hyperparams
         for k, v in hparams.items():
             mlflow.log_param(k, v)
 
         for epoch in range(num_epochs):
-            # --- Train ---
             model.train()
             running_loss = 0.0
             n_batches = 0
@@ -188,7 +184,6 @@ def objective(trial: optuna.Trial) -> float:
 
             train_loss = running_loss / max(n_batches, 1)
 
-            # --- Validation ---
             model.eval()
             with torch.no_grad():
                 val_losses = []
@@ -220,7 +215,6 @@ def objective(trial: optuna.Trial) -> float:
                 val_rmse_no2 = rmse(y_true_no2_den, y_pred_no2_den)
                 val_smape_no2 = smape(y_true_no2_den, y_pred_no2_den)
 
-            # Log to console
             print(
                 f"[Trial {trial.number}] Epoch {epoch+1}, "
                 f"train_loss={train_loss:.4f}, "
@@ -229,21 +223,17 @@ def objective(trial: optuna.Trial) -> float:
                 f"val_smape_no2={float(val_smape_no2):.2f}"
             )
 
-            # Log to MLflow
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             mlflow.log_metric("val_loss", val_loss, step=epoch)
             mlflow.log_metric("val_rmse_no2", float(val_rmse_no2), step=epoch)
             mlflow.log_metric("val_smape_no2", float(val_smape_no2), step=epoch)
 
             current_rmse = float(val_rmse_no2)
-            # Report to Optuna for pruning
             trial.report(current_rmse, step=epoch)
 
-            # Optuna pruning hook
             if trial.should_prune():
                 raise optuna.TrialPruned()
 
-            # Early stopping
             if current_rmse < best_val_rmse:
                 best_val_rmse = current_rmse
                 torch.save(model.state_dict(), best_model_path)
@@ -255,13 +245,11 @@ def objective(trial: optuna.Trial) -> float:
                 print(f"[Trial {trial.number}] Early stopping after {epoch+1} epochs.")
                 break
 
-        # Return best validation RMSE as objective
         mlflow.log_metric("best_val_rmse_no2", best_val_rmse)
         return best_val_rmse
 
 
 def main():
-    # You can tweak n_trials as you like
     study = optuna.create_study(
         direction="minimize",
         study_name="HierHGRU_Optimization",

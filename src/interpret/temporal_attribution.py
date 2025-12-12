@@ -36,7 +36,6 @@ def compute_saliency_gru(
         model.zero_grad()
 
         y_hat = model(x)  # [B, H]
-        # scalar objective: mean prediction over batch and horizon
         score = y_hat.mean()
         score.backward()
 
@@ -52,7 +51,6 @@ def compute_saliency_gru(
     if grads_sum is None:
         raise RuntimeError("No batches in loader for saliency computation.")
 
-    # average over samples
     feature_time_importance = grads_sum / float(count)
 
     return {
@@ -69,6 +67,5 @@ def summarize_saliency(
     feature_time_importance: [L, F]
     Returns dict(feature_name -> importance)
     """
-    # mean over time steps
     per_feature = feature_time_importance.mean(dim=0)  # [F]
     return {name: float(val.item()) for name, val in zip(feature_names, per_feature)}

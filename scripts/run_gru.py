@@ -71,10 +71,10 @@ def main():
 
     model = GRUForecast(
         input_size=input_size,
-        hidden_size=32,
+        hidden_size=112,
         num_layers=1,
         horizon=horizon,
-        dropout=0.2,
+        dropout=0.38,
     ).to(device)
 
     lr = float(cfg["training"]["lr"])
@@ -93,7 +93,6 @@ def main():
     epochs_no_improve = 0
 
     with mlflow.start_run(run_name=f"GRU_{mlflow_cfg['run_postfix']}"):
-        # log configuration / hyperparameters
         mlflow.log_param("model_type", "GRU")
         mlflow.log_param("hidden_size", 32)
         mlflow.log_param("num_layers", 1)
@@ -158,7 +157,6 @@ def main():
                 print(f"[run_gru] Early stopping triggered after {epoch+1} epochs.")
                 break
 
-        # load best model and evaluate on test set inside the run
         model.load_state_dict(torch.load(best_model_path, map_location=device))
         test_metrics = evaluate_model(
             model,
