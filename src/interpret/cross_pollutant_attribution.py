@@ -32,12 +32,9 @@ def cross_pollutant_importance_multi_gru(
         raise ValueError(f"{no2_name} not found in target_cols: {target_cols}")
     no2_idx = target_cols.index(no2_name)
 
-    # map pollutant name -> feature index in feature_cols
     pollutant_to_idx: Dict[str, int] = {}
     for p in pollutants_of_interest:
         if p not in feature_cols:
-            # silently skip or raise depending on your preference
-            # here we skip and warn later if dict is empty
             continue
         pollutant_to_idx[p] = feature_cols.index(p)
 
@@ -67,14 +64,12 @@ def cross_pollutant_importance_multi_gru(
         B, L, F = grad.shape
         sample_count += B
 
-        # sum |grad| over batch and time for each pollutant feature
         for p, j in pollutant_to_idx.items():
             grad_sums[p] += grad[:, :, j].sum().item()
 
     if sample_count == 0:
         raise RuntimeError("No batches processed for cross-pollutant attribution.")
 
-    # normalize by number of samples and timesteps for comparability
     norm_factor = float(sample_count * L)
     pollutant_importance = {p: grad_sums[p] / norm_factor for p in pollutant_to_idx}
 

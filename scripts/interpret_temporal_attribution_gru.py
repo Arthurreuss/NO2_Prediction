@@ -32,11 +32,10 @@ def main():
         shuffle=False,
     )
 
-    # load trained GRU
     model_path = Path("results") / "gru_best_trial_14.pt"
     model = GRUForecast(
         input_size=len(feature_cols),
-        hidden_size=112,  # must match training config
+        hidden_size=112,
         num_layers=1,
         horizon=horizon,
         dropout=0.38,
@@ -52,7 +51,6 @@ def main():
     for name, val in sorted(per_feature.items(), key=lambda kv: kv[1], reverse=True):
         print(f"  {name:30s}  {val:.6f}")
 
-    # optional: show time-step importance
     per_time = ft_imp.mean(dim=1)  # [L]
     print("\nMean saliency per time step (0 = oldest, L-1 = most recent):")
     for t, v in enumerate(per_time):

@@ -34,21 +34,19 @@ def main():
         shuffle=False,
     )
 
-    # load trained Multi GRU
     model_path = Path("results") / "multi_gru_best_trial_8.pt"
     model = MultiGRUForecast(
         input_size=len(feature_cols),
         target_cols=target_cols,
         horizon=horizon,
-        shared_hidden_size=112,  # must match your training config
-        branch_hidden_size=64,  # must match your training config
+        shared_hidden_size=112,
+        branch_hidden_size=64,
         num_layers=1,
         dropout=0.44,
     ).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    # pollutants to inspect (you can extend this list)
     pollutants = ["pm10", "pm2_5", "ozone", "nitrogen_dioxide"]
 
     importance = cross_pollutant_importance_multi_gru(

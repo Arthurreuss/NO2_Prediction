@@ -17,7 +17,6 @@ from src.utils.scale import inverse_target
 
 
 def main():
-    # --- Load config ---
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
 
@@ -34,7 +33,6 @@ def main():
     input_length = data_cfg["input_length"]
     horizon = data_cfg["horizon"]
 
-    # --- Dataloaders ---
     train_loader = make_multitarget_dataloader(
         data_cfg["train_path"],
         feature_cols,
@@ -69,7 +67,6 @@ def main():
     df_train = pd.read_parquet(data_cfg["train_path"])
     numeric_cols = df_train.select_dtypes(include=[float, int]).columns.tolist()
 
-    # --- Model hyperparameters (you can later move these into config / Optuna) ---
     downsample_factor = models_cfg.get("hgru", {}).get("downsample_factor", 24)
     short_hidden_size = models_cfg.get("hgru", {}).get("short_hidden_size", 64)
     long_hidden_size = models_cfg.get("hgru", {}).get("long_hidden_size", 32)
@@ -105,7 +102,6 @@ def main():
     epochs_no_improve = 0
 
     with mlflow.start_run(run_name=f"HierHGRU_{mlflow_cfg['run_postfix']}"):
-        # --- Log model + training config ---
         mlflow.log_param("model_type", "HierarchicalHGRU")
         mlflow.log_param("downsample_factor", downsample_factor)
         mlflow.log_param("short_hidden_size", short_hidden_size)
@@ -127,7 +123,6 @@ def main():
             raise ValueError(f"{no2_col} not in target_cols: {target_cols}")
         no2_idx = target_cols.index(no2_col)
 
-        # --- Training loop ---
         for epoch in range(cfg["training"]["num_epochs"]):
             model.train()
             running_loss = 0.0
@@ -152,7 +147,6 @@ def main():
 
             train_loss = running_loss / max(n_batches, 1)
 
-            # --- Validation ---
             model.eval()
             with torch.no_grad():
                 val_losses = []
@@ -172,7 +166,6 @@ def main():
                 y_true = torch.cat(y_true_all, dim=0)  # [N, H, T]
                 y_pred = torch.cat(y_pred_all, dim=0)  # [N, H, T]
 
-                # NO2-only, denormalized
                 y_true_no2 = y_true[..., no2_idx]
                 y_pred_no2 = y_pred[..., no2_idx]
 
@@ -194,13 +187,11 @@ def main():
                 f"val_smape_no2={float(val_smape_no2):.2f}"
             )
 
-            # log metrics
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             mlflow.log_metric("val_loss", val_loss, step=epoch)
             mlflow.log_metric("val_rmse_no2", float(val_rmse_no2), step=epoch)
             mlflow.log_metric("val_smape_no2", float(val_smape_no2), step=epoch)
 
-            # Early stopping on NO2 RMSE
             current_rmse = float(val_rmse_no2)
             if current_rmse < best_val_rmse:
                 best_val_rmse = current_rmse
@@ -213,7 +204,6 @@ def main():
                 print(f"[run_hier_hgru] Early stopping after {epoch+1} epochs.")
                 break
 
-        # --- Test evaluation with best model ---
         model.load_state_dict(torch.load(best_model_path, map_location=device))
         model.eval()
 

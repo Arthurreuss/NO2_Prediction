@@ -61,22 +61,18 @@ def permutation_importance_gru(
     torch.manual_seed(seed)
     model.eval()
 
-    # baseline RMSE
     baseline_rmse = evaluate_rmse_norm_gru(model, loader, device)
 
     F = len(feature_names)
     importances = {name: 0.0 for name in feature_names}
 
-    # we do n_repeats and average
     for _ in range(n_repeats):
-        # for each feature j
         for j, name in enumerate(feature_names):
             all_residuals = []
             for x, y in loader:
                 x = x.to(device)
                 y = y.to(device)
 
-                # permute feature j across batch dimension
                 idx = torch.randperm(x.size(0), device=x.device)
                 x_perm = x.clone()
                 x_perm[:, :, j] = x_perm[idx, :, j]
@@ -90,7 +86,6 @@ def permutation_importance_gru(
             rmse_perm = _rmse_from_residuals(all_residuals)
             importances[name] += rmse_perm - baseline_rmse
 
-    # average over repeats
     for name in importances:
         importances[name] /= float(n_repeats)
 

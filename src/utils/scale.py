@@ -1,4 +1,3 @@
-# src/utils/scale.py
 from typing import List
 
 import numpy as np
@@ -13,18 +12,22 @@ def inverse_target(
     target_col: str,
 ) -> torch.Tensor:
     """
-    Inverse-transform the target column using the scaler that was
-    fitted on df[numeric_cols] in PreProcessingPipeline.normalize_data.
-
-    Strategy:
-      - create dummy array of shape (N*H, len(numeric_cols))
-      - fill ONLY the target column with flattened y_norm
-      - apply scaler.inverse_transform
-      - extract the target column and reshape back to [N, H]
+    Accepts y_norm shaped [N,H] or [N,H,1]. Returns [N,H] in original units.
     """
-    y_np = y_norm.numpy()  # [N, H]
+    y_norm = y_norm.detach().cpu()
+
+    # allow [N,H,1]
+    if y_norm.ndim == 3 and y_norm.shape[-1] == 1:
+        y_norm = y_norm[..., 0]
+
+    if y_norm.ndim != 2:
+        raise ValueError(
+            f"inverse_target expected [N,H] (or [N,H,1]) but got shape {tuple(y_norm.shape)}"
+        )
+
+    y_np = y_norm.numpy()
     n, h = y_np.shape
-    flat = y_np.reshape(-1)  # [N*H]
+    flat = y_np.reshape(-1)
 
     n_features = len(numeric_cols)
     target_idx = numeric_cols.index(target_col)

@@ -35,7 +35,7 @@ def build_test_loaders(cfg: Dict[str, Any]):
         shuffle=False,
     )
 
-    hgru_test_loader = make_multitarget_dataloader(
+    multi_gru_test_loader = make_multitarget_dataloader(
         data_cfg["test_path"],
         data_cfg["feature_cols"],
         data_cfg["target_cols"],
@@ -45,7 +45,7 @@ def build_test_loaders(cfg: Dict[str, Any]):
         shuffle=False,
     )
 
-    return gru_test_loader, hgru_test_loader
+    return gru_test_loader, multi_gru_test_loader
 
 
 def prepare_scaler_and_numeric(cfg: Dict[str, Any]):
@@ -70,17 +70,14 @@ def evaluate_gru_trial(
     horizon = data_cfg["horizon"]
     target_col = data_cfg["target_col"]
 
-    # Adjust this pattern if your filenames differ
     ckpt_path = Path("results") / f"gru_best_trial_{trial_id}.pt"
     if not ckpt_path.exists():
         raise FileNotFoundError(f"GRU checkpoint not found: {ckpt_path}")
 
-    # For evaluation we need the architecture used in the trial.
-    # Here we assume you used fixed architecture except hyperparams;
-    # if not, you'll need to read them from Optuna/MLflow.
+    # hard code model parameters here
     model = GRUForecast(
         input_size=input_size,
-        hidden_size=112,  # or hardcode / adjust
+        hidden_size=112,
         num_layers=1,
         horizon=horizon,
         dropout=0.38,
@@ -106,7 +103,7 @@ def evaluate_gru_trial(
         print(f"  {k}: {float(v):.4f}")
 
 
-def evaluate_hgru_trial(
+def evaluate_multi_gru_trial(
     trial_id: int,
     cfg: Dict[str, Any],
     device: torch.device,
@@ -125,20 +122,19 @@ def evaluate_hgru_trial(
         raise ValueError(f"{no2_col} not in target_cols: {target_cols}")
     no2_idx = target_cols.index(no2_col)
 
-    # Adjust this pattern if your filenames differ
-    ckpt_path = Path("results") / f"hgru_best_trial_{trial_id}.pt"
+    ckpt_path = Path("results") / f"multigru_best_trial_{trial_id}.pt"
     if not ckpt_path.exists():
-        raise FileNotFoundError(f"HGRU checkpoint not found: {ckpt_path}")
+        raise FileNotFoundError(f"MultiGRU checkpoint not found: {ckpt_path}")
 
-    # Same caveat: if architecture varies per trial, pull dims from Optuna/MLflow.
+    # hard code model parameters here
     model = MultiGRUForecast(
         input_size=input_size,
         target_cols=target_cols,
         horizon=horizon,
         shared_hidden_size=112,
-        branch_hidden_size=64,
+        branch_hidden_size=56,
         num_layers=1,
-        dropout=0.44,
+        dropout=0.11,
     ).to(device)
 
     state_dict = torch.load(ckpt_path, map_location=device)
@@ -168,7 +164,7 @@ def evaluate_hgru_trial(
         test_rmse_no2 = rmse(y_true_no2_den, y_pred_no2_den)
         test_smape_no2 = smape(y_true_no2_den, y_pred_no2_den)
 
-    print(f"\n[HGRU] Trial {trial_id} – Test NO2 metrics:")
+    print(f"\n[MultiGRU] Trial {trial_id} – Test NO2 metrics:")
     print(f"  rmse:  {float(test_rmse_no2):.4f}")
     print(f"  smape: {float(test_smape_no2):.4f}")
 
@@ -183,11 +179,11 @@ def main():
         help="List of GRU trial IDs to evaluate (e.g. --gru-trials 3 7 14)",
     )
     parser.add_argument(
-        "--hgru-trials",
+        "--multi-gru-trials",
         nargs="*",
         type=int,
         default=[],
-        help="List of HGRU trial IDs to evaluate (e.g. --hgru-trials 8 11)",
+        help="List of MultiGRU trial IDs to evaluate (e.g. --multi-gru-trials 8 11)",
     )
     args = parser.parse_args()
 
@@ -195,7 +191,7 @@ def main():
     device = get_device(cfg["training"].get("device", "auto"))
     print(f"[evaluate_trials] Using device: {device}")
 
-    gru_test_loader, hgru_test_loader = build_test_loaders(cfg)
+    gru_test_loader, multigru_test_loader = build_test_loaders(cfg)
     scaler, numeric_cols = prepare_scaler_and_numeric(cfg)
 
     for trial_id in args.gru_trials:
@@ -208,12 +204,12 @@ def main():
             numeric_cols=numeric_cols,
         )
 
-    for trial_id in args.hgru_trials:
-        evaluate_hgru_trial(
+    for trial_id in args.multi_gru_trials:
+        evaluate_multi_gru_trial(
             trial_id,
             cfg,
             device=device,
-            test_loader=hgru_test_loader,
+            test_loader=multigru_test_loader,
             scaler=scaler,
             numeric_cols=numeric_cols,
         )
