@@ -1,6 +1,6 @@
 import yaml
 
-from src.features.preprocess import PreProcessingPipeline
+from scripts.preprocess import PreProcessingPipeline
 
 if __name__ == "__main__":
     with open("config.yaml", "r") as f:

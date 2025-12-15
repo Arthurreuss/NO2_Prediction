@@ -7,3 +7,5 @@ __pycache__/
 test.py
 .pytest_cache/
 results/
+mlruns/
+mlflow.db

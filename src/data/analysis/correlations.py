@@ -49,7 +49,6 @@ def correlations_with_target(
         raise ValueError(f"target_col '{target_col}' not found in DataFrame.")
 
     df_num = df.select_dtypes(include=[np.number]).copy()
-    # ensure target is included in numeric subset
     if target_col not in df_num.columns:
         df_num[target_col] = df[target_col].astype(float)
 

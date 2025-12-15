@@ -46,7 +46,7 @@ def evaluate_model(
     model: Module,
     dataloader: DataLoader,
     loss_fn,
-    device: str = "cpu",
+    device: str,
     scaler=None,
     numeric_cols: Optional[List[str]] = None,
     target_col: Optional[str] = None,
@@ -77,7 +77,6 @@ def evaluate_model(
         "smape_norm": smape(y_true, y_pred),
     }
 
-    # Denormalized metrics in original units (µg/m³) if possible
     if scaler is not None and numeric_cols is not None and target_col is not None:
         y_true_denorm = inverse_target(scaler, y_true, numeric_cols, target_col)
         y_pred_denorm = inverse_target(scaler, y_pred, numeric_cols, target_col)
