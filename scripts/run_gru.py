@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import joblib
+import mlflow
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -16,6 +17,10 @@ from src.utils.train_gru import evaluate_model, train_one_epoch
 def main():
     with open("config.yaml") as f:
         cfg = yaml.safe_load(f)
+
+    mlflow_cfg = cfg["training"]["mlflow"]
+
+    mlflow.set_experiment(mlflow_cfg["experiment_name"])
 
     device = get_device(cfg["training"].get("device", "auto"))
     print(f"[run_gru] Using device: {device}")
@@ -66,10 +71,10 @@ def main():
 
     model = GRUForecast(
         input_size=input_size,
-        hidden_size=32,
+        hidden_size=112,
         num_layers=1,
         horizon=horizon,
-        dropout=0.2,
+        dropout=0.38,
     ).to(device)
 
     lr = float(cfg["training"]["lr"])
@@ -87,63 +92,88 @@ def main():
     best_val_rmse = float("inf")
     epochs_no_improve = 0
 
-    for epoch in range(cfg["training"]["num_epochs"]):
-        train_loss = train_one_epoch(
-            model,
-            train_loader,
-            optimizer,
-            loss_fn,
-            device=device,
-            grad_clip=grad_clip,
-        )
+    with mlflow.start_run(run_name=f"GRU_{mlflow_cfg['run_postfix']}"):
+        mlflow.log_param("model_type", "GRU")
+        mlflow.log_param("hidden_size", 32)
+        mlflow.log_param("num_layers", 1)
+        mlflow.log_param("dropout", 0.2)
+        mlflow.log_param("horizon", horizon)
+        mlflow.log_param("input_length", data_cfg["input_length"])
+        mlflow.log_param("lr", lr)
+        mlflow.log_param("weight_decay", weight_decay)
+        mlflow.log_param("grad_clip", grad_clip)
+        mlflow.log_param("features", ",".join(feature_cols))
+        mlflow.log_param("target_col", target_col)
+        mlflow.log_param("device", str(device))
 
-        val_metrics = evaluate_model(
+        for epoch in range(cfg["training"]["num_epochs"]):
+            train_loss = train_one_epoch(
+                model,
+                train_loader,
+                optimizer,
+                loss_fn,
+                device=device,
+                grad_clip=grad_clip,
+            )
+
+            val_metrics = evaluate_model(
+                model,
+                val_loader,
+                loss_fn,
+                device=device,
+                scaler=scaler,
+                numeric_cols=numeric_cols,
+                target_col=target_col,
+            )
+
+            print(
+                f"Epoch {epoch+1}, "
+                f"train_loss={train_loss:.4f}, "
+                f"val_loss={val_metrics['loss']:.4f}, "
+                f"val_rmse_norm={val_metrics['rmse_norm']:.4f}, "
+                f"val_smape_norm={val_metrics['smape_norm']:.2f}, "
+                f"val_rmse={val_metrics.get('rmse', float('nan')):.4f}, "
+                f"val_smape={val_metrics.get('smape', float('nan')):.2f}"
+            )
+
+            mlflow.log_metric("train_loss", train_loss, step=epoch)
+            mlflow.log_metric("val_loss", val_metrics["loss"], step=epoch)
+            mlflow.log_metric("val_rmse_norm", val_metrics["rmse_norm"], step=epoch)
+            mlflow.log_metric("val_smape_norm", val_metrics["smape_norm"], step=epoch)
+            if "rmse" in val_metrics:
+                mlflow.log_metric("val_rmse", val_metrics["rmse"], step=epoch)
+            if "smape" in val_metrics:
+                mlflow.log_metric("val_smape", val_metrics["smape"], step=epoch)
+
+            current_rmse = val_metrics.get("rmse", val_metrics["rmse_norm"])
+            if current_rmse < best_val_rmse:
+                best_val_rmse = current_rmse
+                torch.save(model.state_dict(), best_model_path)
+                epochs_no_improve = 0
+            else:
+                epochs_no_improve += 1
+
+            if epochs_no_improve >= patience:
+                print(f"[run_gru] Early stopping triggered after {epoch+1} epochs.")
+                break
+
+        model.load_state_dict(torch.load(best_model_path, map_location=device))
+        test_metrics = evaluate_model(
             model,
-            val_loader,
+            test_loader,
             loss_fn,
             device=device,
             scaler=scaler,
             numeric_cols=numeric_cols,
             target_col=target_col,
         )
+        print("[run_gru] Test metrics:", test_metrics)
 
-        parts = [
-            f"Epoch {epoch+1}",
-            f"train_loss={train_loss:.4f}",
-            f"val_loss={val_metrics['loss']:.4f}",
-            f"val_rmse_norm={val_metrics['rmse_norm']:.4f}",
-            f"val_smape_norm={val_metrics['smape_norm']:.2f}",
-        ]
-        if "rmse" in val_metrics:
-            parts.append(f"val_rmse={val_metrics['rmse']:.4f}")
-        if "smape" in val_metrics:
-            parts.append(f"val_smape={val_metrics['smape']:.2f}")
-        print(", ".join(parts))
+        for k, v in test_metrics.items():
+            mlflow.log_metric(f"test_{k}", float(v))
 
-        current_rmse = val_metrics.get("rmse", val_metrics["rmse_norm"])
-
-        if current_rmse < best_val_rmse:
-            best_val_rmse = current_rmse
-            torch.save(model.state_dict(), best_model_path)
-            epochs_no_improve = 0
-        else:
-            epochs_no_improve += 1
-
-        if epochs_no_improve >= patience:
-            print(f"[run_gru] Early stopping triggered after {epoch+1} epochs.")
-            break
-
-    model.load_state_dict(torch.load(best_model_path, map_location=device))
-    test_metrics = evaluate_model(
-        model,
-        test_loader,
-        loss_fn,
-        device=device,
-        scaler=scaler,
-        numeric_cols=numeric_cols,
-        target_col=target_col,
-    )
-    print("[run_gru] Test metrics:", test_metrics)
+        mlflow.pytorch.log_model(model, name="gru_model")
+        mlflow.log_artifact("config.yaml")
 
 
 if __name__ == "__main__":

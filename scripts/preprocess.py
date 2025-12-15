@@ -162,17 +162,28 @@ class PreProcessingPipeline:
         self._create_cyclic_features()
         self._drop_columns(
             [
+                # redundant temps / diagnostics
                 "apparent_temperature",
+                "dew_point_2m",
+                "et0_fao_evapotranspiration",
+                "vapour_pressure_deficit",
+                # precip / snow related
                 "rain",
                 "snowfall",
                 "snow_depth",
                 "weather_code",
+                # redundant pressures
                 "surface_pressure",
+                # clouds
                 "cloud_cover",
                 "cloud_cover_low",
                 "cloud_cover_mid",
+                "cloud_cover_high",
+                # upper-level wind / gusts
                 "wind_speed_100m",
                 "wind_direction_100m",
+                "wind_gusts_10m",
+                # soil temperatures / moistures
                 "soil_temperature_0_to_7cm",
                 "soil_temperature_7_to_28cm",
                 "soil_temperature_28_to_100cm",
@@ -181,14 +192,21 @@ class PreProcessingPipeline:
                 "soil_moisture_7_to_28cm",
                 "soil_moisture_28_to_100cm",
                 "soil_moisture_100_to_255cm",
+                # additional gases and diagnostics we don't model / use
                 "carbon_dioxide",
+                "carbon_monoxide",
                 "methane",
-                "uv_index_clear_sky",
-                "uv_index",
+                "sulphur_dioxide",
                 "aerosol_optical_depth",
                 "ammonia",
+                # radiation / UV diagnostics
+                "uv_index_clear_sky",
+                "uv_index",
             ]
         )
+
+        print("Remaining columns after feature selection:")
+        print(self.df.columns.tolist())
 
         run_full_integrity_check(self.df)
 

@@ -1,32 +1,49 @@
-from typing import Callable
-
 import torch
-from torch.utils.data import DataLoader
 
-from .metrics import rmse, smape
+from src.utils.scale import inverse_target
 
 
-@torch.no_grad()
 def evaluate_persistence(
-    dataloader: DataLoader,
+    loader,
     model,
     horizon: int,
-    device: str,
-) -> dict:
-    y_true_all = []
-    y_pred_all = []
+    *,
+    scaler=None,
+    numeric_cols=None,
+    target_col: str = None,
+):
+    y_true_all, y_pred_all = [], []
 
-    for x, y in dataloader:
-        x = x.to(device)
-        y_hat = model.predict_batch(x, horizon=horizon)  # [B, H]
+    with torch.no_grad():
+        for xb, yb in loader:
+            y_pred = model.predict_batch(xb, horizon)  # [B, H]
 
-        y_true_all.append(y)  # still [B, H]
-        y_pred_all.append(y_hat.cpu())
+            # Ensure yb is [B, H]
+            if yb.ndim == 3 and yb.shape[-1] == 1:
+                yb = yb[..., 0]
 
-    y_true = torch.cat(y_true_all, dim=0)
-    y_pred = torch.cat(y_pred_all, dim=0)
+            y_true_all.append(yb.detach().cpu())
+            y_pred_all.append(y_pred.detach().cpu())
 
-    return {
-        "rmse": rmse(y_true, y_pred),
-        "smape": smape(y_true, y_pred),
-    }
+    y_true = torch.cat(y_true_all, dim=0)  # [N, H]
+    y_pred = torch.cat(y_pred_all, dim=0)  # [N, H]
+
+    if scaler is not None:
+        if numeric_cols is None or target_col is None:
+            raise ValueError(
+                "If scaler is provided, numeric_cols and target_col must be provided."
+            )
+        y_true = inverse_target(scaler, y_true, numeric_cols, target_col)
+        y_pred = inverse_target(scaler, y_pred, numeric_cols, target_col)
+
+    rmse = torch.sqrt(torch.mean((y_pred - y_true) ** 2)).item()
+
+    denom = (torch.abs(y_true) + torch.abs(y_pred)) / 2.0
+    smape = (
+        torch.where(
+            denom == 0, torch.zeros_like(denom), torch.abs(y_pred - y_true) / denom
+        ).mean()
+        * 100.0
+    ).item()
+
+    return {"rmse": rmse, "smape": smape}
