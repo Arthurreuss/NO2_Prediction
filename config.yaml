@@ -96,6 +96,17 @@ data:
 
 
 models:
+  gru:
+    hidden_size: 112
+    num_layers: 2
+    dropout: 0.38
+
+  multi_gru:
+    shared_hidden_size: 112
+    branch_hidden_size: 64
+    num_layers: 2
+    dropout: 0.3
+
   hgru:
     downsample_factor: 24
     short_hidden_size: 64
@@ -107,7 +118,7 @@ models:
 
 training:
   mlflow:
-    experiment_name: NO2_Forecasting
+    experiment_name: Refactored_Test
     run_postfix: short_horizon
   batch_size: 128
   num_epochs: 50
