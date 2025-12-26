@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import joblib
 import mlflow
@@ -11,7 +11,9 @@ from src.utils.device import get_device
 
 
 def setup_experiment(
-    config_path: str = "config.yaml", experiment_name: Optional[str] = None
+    config_path: str = "config.yaml",
+    experiment_name: Optional[str] = None,
+    single: bool = True,
 ) -> Dict[str, Any]:
     """
     Loads config, sets up MLflow, device, scaler, and numeric columns.
@@ -29,7 +31,7 @@ def setup_experiment(
     device = get_device(cfg["training"].get("device", "auto"))
 
     # Data Config
-    data_cfg = cfg["data"]
+    data_cfg = cfg["data"]["single" if single else "multi‚"]
 
     # Load Scaler
     scaler = None

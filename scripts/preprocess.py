@@ -141,11 +141,17 @@ class PreProcessingPipeline:
             f"Normalized {len(numeric_cols)} numeric columns using {self.norm_method} scaler."
         )
 
-    def save_preprocessed_data(self, out_dir: str = "data/processed") -> None:
+    def save_preprocessed_data(self) -> None:
         """
         Save train/val/test splits as parquet files.
         out_dir: directory where files will be written.
         """
+        if len(self.cfg["api_requests"]["locations"].keys()) > 1:
+            out_dir = "data/processed/multi"
+        else:
+            out_dir = os.path.join(
+                "data/processed", list(self.cfg["api_requests"]["locations"].keys())[0]
+            )
         os.makedirs(out_dir, exist_ok=True)
 
         self.train_df.to_parquet(os.path.join(out_dir, "train.parquet"), index=False)
@@ -213,6 +219,6 @@ class PreProcessingPipeline:
         self.split_data()
 
         self.normalize_data()
-        self.save_preprocessed_data("data/processed")
+        self.save_preprocessed_data()
 
         return self.train_df, self.val_df, self.test_df

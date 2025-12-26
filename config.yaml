@@ -65,9 +65,14 @@ api_requests: # use of all the data for the analysis
     end_date: 2024-12-31
 
 data:
-  train_path: "data/processed/train.parquet"
-  val_path: "data/processed/val.parquet"
-  test_path: "data/processed/test.parquet"
+  single:
+    train_path: "data/processed/utrecht/train.parquet"
+    val_path: "data/processed/utrecht/val.parquet"
+    test_path: "data/processed/utrecht/test.parquet"
+  multi:
+    train_path: "data/processed/multi/train.parquet"
+    val_path: "data/processed/multi/val.parquet"
+    test_path: "data/processed/multi/test.parquet"
 
   feature_cols:
     - temperature_2m
