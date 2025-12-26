@@ -11,6 +11,7 @@ from src.models.hgru import HierarchicalGRUForecast
 from src.training.engine import fit_model
 from src.training.evaluate import evaluate_model
 from src.training.setup import get_dataloaders, setup_experiment
+from src.utils.hp_optimization_helper import set_hyperparameter_ranges
 
 
 def objective(trial, ctx):
@@ -19,22 +20,7 @@ def objective(trial, ctx):
     data_cfg = cfg["data"]
     target_cols = data_cfg["target_cols"]
 
-    hp = {
-        "downsample_factor": trial.suggest_categorical(
-            "downsample_factor", [12, 24, 48]
-        ),
-        "short_hidden_size": trial.suggest_categorical(
-            "short_hidden_size", [32, 64, 96, 128]
-        ),
-        "long_hidden_size": trial.suggest_categorical(
-            "long_hidden_size", [32, 64, 96, 128]
-        ),
-        "num_layers_short": trial.suggest_int("num_layers_short", 1, 2),
-        "num_layers_long": trial.suggest_int("num_layers_long", 1, 2),
-        "dropout": trial.suggest_float("dropout", 0.1, 0.6),
-        "lr": trial.suggest_float("lr", 1e-4, 5e-3, log=True),
-        "weight_decay": trial.suggest_float("weight_decay", 1e-7, 1e-3, log=True),
-    }
+    hp = set_hyperparameter_ranges(cfg, "hgru", trial)
 
     train_loader, val_loader, _ = get_dataloaders(cfg, multi_target=True)
 

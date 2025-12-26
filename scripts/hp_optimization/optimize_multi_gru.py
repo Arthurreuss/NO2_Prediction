@@ -11,6 +11,7 @@ from src.models.multi_gru import MultiGRUForecast
 from src.training.engine import fit_model
 from src.training.evaluate import evaluate_model
 from src.training.setup import get_dataloaders, setup_experiment
+from src.utils.hp_optimization_helper import set_hyperparameter_ranges
 
 
 def objective(trial, ctx):
@@ -19,14 +20,7 @@ def objective(trial, ctx):
     data_cfg = cfg["data"]
     target_cols = data_cfg["target_cols"]
 
-    hp = {
-        "shared_hidden_size": trial.suggest_int("shared_hidden_size", 16, 128, step=16),
-        "branch_hidden_size": trial.suggest_int("branch_hidden_size", 8, 64, step=8),
-        "num_layers": trial.suggest_int("num_layers", 1, 3),
-        "dropout": trial.suggest_float("dropout", 0.1, 0.5),
-        "lr": trial.suggest_float("lr", 1e-4, 1e-2, log=True),
-        "weight_decay": trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True),
-    }
+    hp = set_hyperparameter_ranges(cfg, "multi_gru", trial)
 
     train_loader, val_loader, _ = get_dataloaders(cfg, multi_target=True)
 
