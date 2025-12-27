@@ -12,8 +12,8 @@ from src.utils.scale import inverse_target
 def evaluate_model(
     model: Module,
     dataloader: DataLoader,
-    loss_fn,
     device: str,
+    loss_fn,
     scaler=None,
     numeric_cols: Optional[List[str]] = None,
     target_col: Optional[str] = None,
