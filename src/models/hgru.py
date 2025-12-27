@@ -5,14 +5,19 @@ import torch.nn as nn
 
 
 class HierarchicalGRUForecast(nn.Module):
-    """Hierarchical GRU for multi-target air-quality forecasting.
+    """Hierarchical GRU for multi-target forecasting with fused short/long context.
 
     Architecture:
-      - Level 1 (short-term): GRU over hourly inputs [B, L, F] -> [B, L, H_short]
-      - Temporal downsampling: groups every `downsample_factor` steps and mean-pools
-        to produce a coarse sequence [B, L_coarse, H_short]
-      - Level 2 (long-term): GRU over coarse sequence -> hidden state [B, H_long]
-      - Decoder: maps final long-term hidden state to horizon x targets
+      - Short-term GRU encodes fine-grained inputs and produces:
+          - `short_out`: per-step hidden states [B, L, H_short]
+          - `short_hn`: final hidden state(s) [num_layers_short, B, H_short]
+      - Downsampling mean-pools `short_out` every `downsample_factor` steps to produce
+        a coarse sequence [B, L_coarse, H_short]
+      - Long-term GRU encodes the coarse sequence and produces:
+          - `long_hn`: final hidden state(s) [num_layers_long, B, H_long]
+      - Feature fusion concatenates the last-layer final states from long- and short-term
+        encoders to form a combined representation [B, H_long + H_short]
+      - Decoder maps the combined representation to horizon x targets
 
     Output shape:
         [B, horizon, T] where T = len(target_cols)
@@ -30,19 +35,20 @@ class HierarchicalGRUForecast(nn.Module):
         num_layers_long: int = 1,
         dropout: float = 0.2,
     ) -> None:
-        """Initialize the hierarchical GRU model.
+        """Initialize the hierarchical GRU model with fused decoder input.
 
         Args:
             input_size: Number of input features per time step.
             target_cols: Names of target variables to predict.
             horizon: Forecast horizon (number of future steps predicted).
             downsample_factor: Number of fine-grained steps to aggregate into one
-                coarse step (e.g., 24 for daily aggregation from hourly inputs).
+                coarse step.
             short_hidden_size: Hidden size of the short-term GRU.
             long_hidden_size: Hidden size of the long-term GRU.
             num_layers_short: Number of layers in the short-term GRU.
             num_layers_long: Number of layers in the long-term GRU.
-            dropout: Dropout probability used in GRUs (when layers > 1) and decoder.
+            dropout: Dropout probability applied within GRUs (when layers > 1)
+                and within the decoder.
         """
         super().__init__()
         self.input_size = input_size
@@ -66,10 +72,10 @@ class HierarchicalGRUForecast(nn.Module):
             batch_first=True,
             dropout=dropout if num_layers_long > 1 else 0.0,
         )
+        decoder_input_size = long_hidden_size + short_hidden_size
 
         self.decoder = nn.Sequential(
-            nn.Linear(long_hidden_size, long_hidden_size),
-            nn.ReLU(),
+            nn.Linear(decoder_input_size, long_hidden_size),
             nn.Dropout(dropout),
             nn.Linear(long_hidden_size, self.horizon * self.n_targets),
         )
@@ -83,23 +89,23 @@ class HierarchicalGRUForecast(nn.Module):
         the full sequence is returned as a single coarse step.
 
         Args:
-            h_seq: Hidden-state sequence of shape [batch_size, seq_len, H_short].
+            h_seq: Hidden-state sequence of shape [B, L, H_short].
 
         Returns:
-            A coarse hidden-state sequence of shape [batch_size, seq_len_coarse, H_short].
+            A coarse hidden-state sequence of shape [B, L_coarse, H_short].
         """
         B, L, Hs = h_seq.shape
         k = self.downsample_factor
 
         if L < k:
-            return h_seq.mean(dim=1, keepdim=True)  # [B, 1, Hs]
+            return h_seq.mean(dim=1, keepdim=True)
 
         L_trim = (L // k) * k
-        h_trim = h_seq[:, :L_trim, :]  # [B, L_trim, Hs]
+        h_trim = h_seq[:, :L_trim, :]
 
         L_coarse = L_trim // k
         h_trim = h_trim.view(B, L_coarse, k, Hs)
-        h_coarse = h_trim.mean(dim=2)  # [B, L_coarse, Hs]
+        h_coarse = h_trim.mean(dim=2)
 
         return h_coarse
 
@@ -107,25 +113,21 @@ class HierarchicalGRUForecast(nn.Module):
         """Run a forward pass of the model.
 
         Args:
-            x: Input tensor of normalized features with shape
-                [batch_size, seq_len, input_size].
+            x: Input tensor of normalized features with shape [B, L, F].
 
         Returns:
-            A tensor of shape [batch_size, horizon, n_targets] containing the
-            model's forecasts for each target over the forecast horizon.
+            A tensor of shape [B, horizon, n_targets] containing the forecasts.
         """
-        short_out, _ = self.short_gru(x)  # [B, L, H_short]
+        short_out, short_hn = self.short_gru(x)
+        coarse_seq = self._downsample_hidden(short_out)
+        _, long_hn = self.long_gru(coarse_seq)
 
-        coarse_seq = self._downsample_hidden(short_out)  # [B, L_coarse, H_short]
+        final_short = short_hn[-1]
+        final_long = long_hn[-1]
 
-        long_out, long_hn = self.long_gru(
-            coarse_seq
-        )  # long_hn: [num_layers_long, B, H_long]
+        combined_state = torch.cat([final_long, final_short], dim=1)
 
-        # long_hn[-1]: [B, H_long]
-        h_final = long_hn[-1]  # [B, H_long]
-
-        dec = self.decoder(h_final)  # [B, horizon * T]
-        y_hat = dec.view(-1, self.horizon, self.n_targets)  # [B, H, T]
+        dec = self.decoder(combined_state)
+        y_hat = dec.view(-1, self.horizon, self.n_targets)
 
         return y_hat
