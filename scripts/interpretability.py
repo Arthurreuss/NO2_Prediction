@@ -5,7 +5,24 @@ from src.training.setup import get_dataloaders, setup_experiment
 from src.utils.helper import load_torch_model_from_registry
 
 
-def main():
+def main() -> None:
+    """Run a combined interpretability analysis for multiple registered models.
+
+    This script:
+      - sets up an experiment context (config, MLflow experiment, device, etc.)
+      - loads feature/target metadata from config
+      - creates a test DataLoader (multi-target)
+      - iterates over a list of registered model names and runs:
+          1) permutation feature importance (ΔRMSE on NO2)
+          2) temporal saliency (input-gradient magnitude)
+          3) cross-pollutant attribution (input-gradients of NO2 w.r.t. pollutant features)
+
+    The script prints results to stdout and continues to the next model if any
+    individual analysis step fails.
+
+    Returns:
+        None.
+    """
     ctx = setup_experiment("config.yaml", experiment_name="Interpretability_Combined")
     cfg = ctx["cfg"]
     device = ctx["device"]
