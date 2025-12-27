@@ -1,6 +1,8 @@
 from typing import Any, Dict
 
+import mlflow
 import optuna
+import torch
 
 
 def set_hyperparameter_ranges(
@@ -63,3 +65,29 @@ def set_hyperparameter_ranges(
             raise ValueError(f"Unknown hyperparameter type: {spec['type']}")
 
     return hp
+
+
+def load_torch_model_from_registry(
+    model_name: str, device: str = "cpu"
+) -> torch.nn.Module:
+    """Load a registered PyTorch model from the MLflow Model Registry.
+
+    This function loads a model that was logged using
+    `mlflow.pytorch.log_model` and registered in the MLflow Model Registry.
+    The model is loaded from the `production` stage, moved to the specified
+    device, and set to evaluation mode.
+
+    Args:
+        model_name: Name of the registered MLflow model.
+        device: Device identifier to load the model onto (e.g., "cpu",
+            "cuda", or "mps").
+
+    Returns:
+        A PyTorch model loaded from the MLflow registry, moved to the
+        specified device, and set to evaluation mode.
+    """
+    model_uri = f"models:/{model_name}@production"
+    model = mlflow.pytorch.load_model(model_uri, map_location=device)
+    model.to(device)
+    model.eval()
+    return model
