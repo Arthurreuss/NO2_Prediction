@@ -84,4 +84,4 @@ def make_multitarget_dataloader(
         horizon=horizon,
         step=step,
     )
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, drop_last=True)
+    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle, drop_last=False)

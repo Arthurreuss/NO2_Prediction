@@ -134,7 +134,7 @@ def main() -> None:
         horizon=cfg["data"]["horizon"],
         shared_hidden_size=best_hp["shared_hidden_size"],
         branch_hidden_size=best_hp["branch_hidden_size"],
-        num_layers=1,
+        num_layers=best_hp["num_layers"],
         dropout=best_hp["dropout"],
     ).to(device)
 

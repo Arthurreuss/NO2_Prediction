@@ -220,7 +220,7 @@ training:
   mlflow:
     experiment_name: Refactored_Test
     run_postfix: test
-  batch_size: 256
+  batch_size: 512
   num_epochs: 50
   lr: 0.001
   weight_decay: 0.0001
