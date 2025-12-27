@@ -1,7 +1,9 @@
+from math import log
 from pathlib import Path
 from typing import Callable, Optional
 
 import mlflow
+import mlflow.pytorch
 import optuna
 import torch
 import torch.nn as nn
@@ -65,13 +67,13 @@ def fit_model(
             model, train_loader, optimizer, loss_fn, device, grad_clip
         )
 
-        metrics = validate_fn(model, val_loader, device)
+        metrics = validate_fn(model=model, dataloader=val_loader, device=device)
         current_score = metrics.get(
             "rmse", metrics.get("score", metrics.get("val_loss"))
         )
 
         print(
-            f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Score: {current_score:.4f}"
+            f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Score: {current_score:.4f} | RMSE: {metrics.get('rmse', float('nan')):.4f} | SMAPE: {metrics.get('smape', float('nan')):.4f}"
         )
 
         if log_mlflow:

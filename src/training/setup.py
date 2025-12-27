@@ -3,7 +3,6 @@ from typing import Any, Dict, Optional
 import joblib
 import mlflow
 import pandas as pd
-import yaml
 
 from src.data.dataloaders import make_dataloader, make_multitarget_dataloader
 from src.utils.cfg import load_config
@@ -13,7 +12,7 @@ from src.utils.device import get_device
 def setup_experiment(
     config_path: str = "config.yaml",
     experiment_name: Optional[str] = None,
-    single: bool = True,
+    single_sensor: bool = True,
 ) -> Dict[str, Any]:
     """
     Loads config, sets up MLflow, device, scaler, and numeric columns.
@@ -31,15 +30,14 @@ def setup_experiment(
     device = get_device(cfg["training"].get("device", "auto"))
 
     # Data Config
-    data_cfg = cfg["data"]["single" if single else "multi‚"]
+    data_cfg = cfg["data"]
+    data_paths = data_cfg["single" if single_sensor else "multi‚"]
 
     # Load Scaler
-    scaler = None
-    if "scaler_path" in data_cfg and data_cfg["scaler_path"]:
-        scaler = joblib.load(data_cfg["scaler_path"])
+    scaler = joblib.load(data_paths["scaler_path"])
 
     # Load Numeric Cols (metadata)
-    df_train = pd.read_parquet(data_cfg["train_path"])
+    df_train = pd.read_parquet(data_paths["train_path"])
     numeric_cols = df_train.select_dtypes(include=[float, int]).columns.tolist()
 
     return {
@@ -51,26 +49,30 @@ def setup_experiment(
     }
 
 
-def get_dataloaders(cfg: Dict[str, Any], multi_target: bool = False):
+def get_dataloaders(
+    cfg: Dict[str, Any], multi_target: bool = False, multi_city: bool = False
+):
     """
     Helper to generate train/val/test loaders based on the context.
     """
     data_cfg = cfg["data"]
+    data_paths = data_cfg["multi" if multi_city else "single"]
     batch_size = cfg["training"]["batch_size"]
     loader_func = make_multitarget_dataloader if multi_target else make_dataloader
 
     common_args = {
-        "feature_cols": (
-            data_cfg["feature_cols"] if multi_target else data_cfg["feature_col"]
+        "feature_cols": data_cfg["feature_cols"],
+        ("target_cols" if multi_target else "target_col"): (
+            data_cfg.get("target_cols") if multi_target else data_cfg["target_col"]
         ),
         "input_length": data_cfg["input_length"],
         "horizon": data_cfg["horizon"],
         "batch_size": batch_size,
     }
 
-    train_loader = loader_func(data_cfg["train_path"], shuffle=True, **common_args)
-    val_loader = loader_func(data_cfg["val_path"], shuffle=False, **common_args)
-    test_loader = loader_func(data_cfg["test_path"], shuffle=False, **common_args)
+    train_loader = loader_func(data_paths["train_path"], shuffle=True, **common_args)
+    val_loader = loader_func(data_paths["val_path"], shuffle=False, **common_args)
+    test_loader = loader_func(data_paths["test_path"], shuffle=False, **common_args)
 
     return train_loader, val_loader, test_loader
 
