@@ -13,7 +13,29 @@ from src.training.evaluate import evaluate_model
 from src.training.setup import get_dataloaders, log_hyperparameters, setup_experiment
 
 
-def main():
+def main() -> None:
+    """
+    Runs the training, validation, and testing pipeline for the Multi-GRU forecasting model.
+
+    This function sets up the experiment context, loads configuration and data, initializes the model,
+    optimizer, and loss function, and manages the training loop with early stopping and model checkpointing.
+    It also logs metrics and artifacts to MLflow for experiment tracking.
+
+    Steps performed:
+        1. Loads experiment configuration and device setup.
+        2. Prepares data loaders for training, validation, and testing.
+        3. Initializes the Multi-GRU model with hyperparameters from the config.
+        4. Sets up optimizer and loss function.
+        5. Defines the validation function with partial arguments.
+        6. Creates results directory and sets model checkpoint path.
+        7. Starts an MLflow run, logs hyperparameters, and trains the model.
+        8. Loads the best model checkpoint and evaluates on the test set.
+        9. Logs test metrics and model artifacts to MLflow.
+
+    Raises:
+        FileNotFoundError: If the configuration file or required data files are missing.
+        Exception: For any errors during model training, evaluation, or logging.
+    """
     ctx = setup_experiment("config.yaml")
     cfg = ctx["cfg"]
     device = ctx["device"]

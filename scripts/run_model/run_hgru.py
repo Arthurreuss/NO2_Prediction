@@ -12,7 +12,28 @@ from src.training.evaluate import evaluate_model
 from src.training.setup import get_dataloaders, log_hyperparameters, setup_experiment
 
 
-def main():
+def main() -> None:
+    """
+    Runs the training, validation, and testing pipeline for the Hierarchical GRU Forecast model.
+
+    This function sets up the experiment context, loads data, configures the model and optimizer,
+    and manages the training loop with early stopping and model checkpointing. It logs metrics and
+    artifacts to MLflow for experiment tracking.
+
+    Steps performed:
+        1. Loads configuration and experiment context.
+        2. Prepares data loaders for training, validation, and testing.
+        3. Initializes the Hierarchical GRU model with configuration parameters.
+        4. Sets up the optimizer and loss function.
+        5. Defines the validation function for model evaluation.
+        6. Trains the model with early stopping and saves the best checkpoint.
+        7. Loads the best model and evaluates it on the test set.
+        8. Logs test metrics and artifacts to MLflow.
+
+    Raises:
+        FileNotFoundError: If the configuration file or required data files are missing.
+        Exception: For errors during training, validation, or logging.
+    """
     ctx = setup_experiment("config.yaml")
     cfg = ctx["cfg"]
     device = ctx["device"]
@@ -75,7 +96,7 @@ def main():
 
         mlflow.log_metric("test_rmse", test_metrics["rmse"])
         mlflow.log_metric("test_smape", test_metrics["smape"])
-        mlflow.pytorch.log_model(model, "hier_hgru_model")
+        mlflow.pytorch.log_model(model, "hgru_model")
         mlflow.log_artifact("config.yaml")
 
 

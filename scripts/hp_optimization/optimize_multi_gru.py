@@ -11,10 +11,26 @@ from src.models.multi_gru import MultiGRUForecast
 from src.training.engine import fit_model
 from src.training.evaluate import evaluate_model
 from src.training.setup import get_dataloaders, setup_experiment
-from src.utils.hp_optimization_helper import set_hyperparameter_ranges
+from src.utils.helper import set_hyperparameter_ranges
 
 
-def objective(trial, ctx):
+def objective(trial: "optuna.trial.Trial", ctx: dict) -> float:
+    """
+    Objective function for Optuna hyperparameter optimization of a MultiGRUForecast model.
+
+    This function sets up the data loaders, model, optimizer, and loss function, then trains and validates
+    the model using the provided configuration and Optuna trial. It logs parameters and results to MLflow,
+    and returns the best validation score achieved during training.
+
+    Args:
+        trial (optuna.trial.Trial): The Optuna trial object used for suggesting hyperparameters.
+        ctx (dict): Context dictionary containing configuration, device, scaler, and other relevant objects.
+
+    Returns:
+        float: The best validation score (e.g., lowest validation loss) achieved during the trial.
+    """
+
+    print("Starting trial:", trial.number)
     cfg = ctx["cfg"]
     device = ctx["device"]
     data_cfg = cfg["data"]
@@ -50,7 +66,10 @@ def objective(trial, ctx):
     results_dir.mkdir(parents=True, exist_ok=True)
     trial_model_path = results_dir / f"multigru_trial_{trial.number}.pt"
 
-    with mlflow.start_run(nested=True):
+    with mlflow.start_run(
+        run_name=f"MultiGRU_Trial_{trial.number}", nested=True
+    ) as run:
+        trial.set_user_attr("mlflow_run_id", run.info.run_id)
         mlflow.log_params(hp)
 
         best_score = fit_model(
@@ -72,7 +91,20 @@ def objective(trial, ctx):
     return best_score
 
 
-def main():
+def main() -> None:
+    """
+    Runs the hyperparameter optimization workflow for the MultiGRUForecast model using Optuna.
+
+    This function sets up the experiment context, creates and runs an Optuna study to optimize
+    the MultiGRUForecast model's hyperparameters, evaluates the best model on the test set,
+    logs the results and model to MLflow, and cleans up saved model checkpoints.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     ctx = setup_experiment(
         "config.yaml", experiment_name="MultiGRU_Optimization_Optuna"
     )
@@ -92,6 +124,7 @@ def main():
 
     print("\n--- Evaluating Best Model on Test Set ---")
     best_trial = study.best_trial
+    best_run_id = best_trial.user_attrs["mlflow_run_id"]
     best_hp = best_trial.params
     target_cols = cfg["data"]["target_cols"]
 
@@ -127,9 +160,15 @@ def main():
 
     print("Test Results:", test_metrics)
 
-    with mlflow.start_run(run_name="MultiGRU_Best_Test_Results"):
-        mlflow.log_params(best_hp)
+    with mlflow.start_run(run_id=best_run_id):
+        model_name = "multigru_best_model"
+        model_uri = f"runs:/{best_run_id}/{model_name}"
+        mlflow.pytorch.log_model(model, model_name)
+        mlflow.register_model(model_uri, model_name)
         mlflow.log_metrics({f"test_{k}": v for k, v in test_metrics.items()})
+
+    for f in Path("results/optuna_multigru").glob("multigru_trial_*.pt"):
+        f.unlink()
 
 
 if __name__ == "__main__":

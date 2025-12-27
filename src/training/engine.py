@@ -1,9 +1,7 @@
-from math import log
 from pathlib import Path
 from typing import Callable, Optional
 
 import mlflow
-import mlflow.pytorch
 import optuna
 import torch
 import torch.nn as nn
@@ -17,6 +15,23 @@ def train_one_epoch(
     device: torch.device,
     grad_clip: Optional[float] = None,
 ) -> float:
+    """Train a model for a single epoch.
+
+    This function iterates over a dataloader, performs forward and backward
+    passes, applies optional gradient clipping, and updates model parameters.
+
+    Args:
+        model: PyTorch model to train.
+        dataloader: Iterable yielding batches of (x, y) tensors.
+        optimizer: Optimizer used to update model parameters.
+        loss_fn: Loss function used to compute training loss.
+        device: Device on which training is performed.
+        grad_clip: Optional maximum norm for gradient clipping. If provided,
+            gradients are clipped using `torch.nn.utils.clip_grad_norm_`.
+
+    Returns:
+        The average loss over all batches in the epoch.
+    """
     model.train()
     running_loss = 0.0
     n_batches = 0
@@ -55,9 +70,40 @@ def fit_model(
     trial: Optional[optuna.Trial] = None,
     log_mlflow: bool = True,
 ) -> float:
-    """
-    Generic training loop with Early Stopping, MLflow logging, and Optuna pruning.
+    """Fit a model using a training loop with early stopping, MLflow logging, and Optuna pruning.
 
+    The loop trains for up to `epochs` epochs, evaluates on a validation loader
+    via `validate_fn`, tracks the best validation score, and applies early
+    stopping based on `patience`. When a new best score is found, the model
+    state dict is saved to `save_path`.
+
+    If `trial` is provided, validation scores are reported to Optuna and the
+    trial may be pruned.
+
+    If `log_mlflow` is True, training loss and validation metrics are logged
+    to MLflow each epoch.
+
+    Args:
+        model: PyTorch model to train.
+        train_loader: Iterable yielding training batches.
+        val_loader: Iterable yielding validation batches.
+        optimizer: Optimizer used to update model parameters.
+        loss_fn: Loss function used during training.
+        device: Device on which training and validation are performed.
+        epochs: Maximum number of epochs to train.
+        patience: Number of consecutive epochs without improvement allowed
+            before early stopping triggers.
+        save_path: File path where the best model state dict is saved.
+        validate_fn: Validation function called as
+            `validate_fn(model=model, dataloader=val_loader, device=device)`.
+            It is expected to return a dictionary of metrics.
+        grad_clip: Optional maximum norm for gradient clipping. If provided,
+            gradients are clipped during training.
+        trial: Optional Optuna trial used for reporting and pruning.
+        log_mlflow: Whether to log metrics to MLflow.
+
+    Returns:
+        The best validation score observed during training.
     """
     best_score = float("inf")
     epochs_no_improve = 0

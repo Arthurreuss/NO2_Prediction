@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -11,10 +11,37 @@ from src.features.schema import run_full_integrity_check
 
 
 class PreProcessingPipeline:
-    def __init__(self, cfg: Dict, norm_method: str = "standard"):
-        """
-        cfg: configuration dictionary (from config.yaml)
-        norm_method: 'standard' (StandardScaler) or 'minmax' (MinMaxScaler)
+    """End-to-end preprocessing pipeline for weather + air-quality time series.
+
+    This pipeline:
+      1) Fetches raw weather and air-quality data via API helpers.
+      2) Joins the datasets per location and concatenates them into one DataFrame.
+      3) Creates cyclic (sin/cos) time features (and wind direction, if available).
+      4) Drops configured columns.
+      5) Runs an integrity check on the resulting DataFrame.
+      6) Splits into train/val/test by calendar year.
+      7) Normalizes numeric columns using training statistics only.
+      8) Saves the resulting splits and the fitted scaler.
+
+    Attributes:
+        cfg: Configuration dictionary (typically loaded from config.yaml).
+        dfs: Per-location joined DataFrames (collected before concatenation).
+        df: The concatenated full DataFrame across locations.
+        train_df: Training split DataFrame.
+        val_df: Validation split DataFrame.
+        test_df: Test split DataFrame.
+        norm_method: Normalization method: "standard" or "minmax".
+        scaler: Fitted scaler instance used to normalize numeric columns.
+    """
+
+    def __init__(self, cfg: Dict[str, Any], norm_method: str = "standard") -> None:
+        """Initialize the preprocessing pipeline.
+
+        Args:
+            cfg: Configuration dictionary (from config.yaml).
+            norm_method: Normalization method to use:
+                - "standard" for sklearn.preprocessing.StandardScaler
+                - "minmax" for sklearn.preprocessing.MinMaxScaler
         """
         self.cfg = cfg
         self.dfs: List[pd.DataFrame] = []
@@ -28,12 +55,17 @@ class PreProcessingPipeline:
         self.scaler: Optional[object] = None
 
     def _fetch_data(self) -> None:
-        """Call the API request functions."""
+        """Fetch raw weather and air-quality data via the API helper functions."""
         fetch_weather_data(self.cfg)
         fetch_air_quality_data(self.cfg)
 
     def _join_data(self) -> None:
-        """Join weather and air-quality data for each location and concatenate."""
+        """Join weather and air-quality data per location and concatenate.
+
+        Reads per-location CSVs written by the API fetch functions, merges them
+        on ["time", "location"], sorts chronologically, and concatenates all
+        locations into a single DataFrame stored in `self.df`.
+        """
         start_date = self.cfg["api_requests"]["time"]["start_date"]
         end_date = self.cfg["api_requests"]["time"]["end_date"]
 
@@ -58,17 +90,39 @@ class PreProcessingPipeline:
         )
 
     def _encode_cyclic_feature(self, name: str, col: str, max_val: int) -> None:
-        """Encode a cyclical feature using sin/cos on an integer column."""
+        """Encode a cyclical feature using sin/cos.
+
+        Adds two columns to `self.df`:
+          - f"{name}_sin"
+          - f"{name}_cos"
+
+        Args:
+            name: Base name for the encoded feature (used as prefix).
+            col: Column name in `self.df` containing integer-like values.
+            max_val: Period of the cycle (e.g., 24 for hour, 7 for dayofweek).
+        """
         self.df[f"{name}_sin"] = np.sin(2 * np.pi * self.df[col] / max_val)
         self.df[f"{name}_cos"] = np.cos(2 * np.pi * self.df[col] / max_val)
 
     def _drop_columns(self, cols_to_drop: List[str]) -> None:
+        """Drop columns from `self.df` if they exist.
+
+        Args:
+            cols_to_drop: Column names to drop when present in `self.df`.
+        """
         self.df.drop(
             columns=[c for c in cols_to_drop if c in self.df.columns], inplace=True
         )
 
     def _create_cyclic_features(self) -> None:
-        """Create cyclic time features and wind direction encoding."""
+        """Create cyclic time features and (optionally) wind direction encoding.
+
+        Creates integer time components from `time`:
+          - hour, dayofweek, month
+
+        Then encodes each cyclically via sin/cos. If "wind_direction_10m" exists,
+        it is also encoded cyclically. Intermediate integer columns are dropped.
+        """
         if not np.issubdtype(self.df["time"].dtype, np.datetime64):
             self.df["time"] = pd.to_datetime(self.df["time"])
 
@@ -86,12 +140,17 @@ class PreProcessingPipeline:
         self._drop_columns(["hour", "dayofweek", "month", "wind_direction_10m"])
 
     def split_data(self) -> None:
-        """
-        Split into train/val/test by calendar year.
+        """Split the full DataFrame into train/val/test by calendar year.
 
-        - test: last full year
-        - val:  second last full year
-        - train: everything before that
+        Split logic:
+          - test: last (max) year in the dataset
+          - val:  second last year
+          - train: all years before val year
+
+        The resulting splits are stored in:
+          - self.train_df
+          - self.val_df
+          - self.test_df
         """
         years = self.df["time"].dt.year
         max_year = years.max()
@@ -113,9 +172,13 @@ class PreProcessingPipeline:
         )
 
     def normalize_data(self) -> None:
-        """
-        Normalize numeric columns using only training data statistics.
-        Applies the same scaler to train/val/test.
+        """Normalize numeric columns using training statistics only.
+
+        Fits the scaler on numeric columns from `self.train_df`, then applies the
+        same transform to train/val/test. The fitted scaler is stored in `self.scaler`.
+
+        Raises:
+            ValueError: If `norm_method` is not one of {"standard", "minmax"}.
         """
         numeric_cols = self.train_df.select_dtypes(include=[np.number]).columns.tolist()
 
@@ -142,9 +205,17 @@ class PreProcessingPipeline:
         )
 
     def save_preprocessed_data(self) -> None:
-        """
-        Save train/val/test splits as parquet files.
-        out_dir: directory where files will be written.
+        """Save train/val/test splits and the fitted scaler to disk.
+
+        Writes:
+          - train.parquet
+          - val.parquet
+          - test.parquet
+          - scaler.pkl
+
+        Output directory:
+          - "data/processed/multi" if multiple locations are configured
+          - otherwise "data/processed/<single_location>"
         """
         if len(self.cfg["api_requests"]["locations"].keys()) > 1:
             out_dir = "data/processed/multi"
@@ -162,8 +233,23 @@ class PreProcessingPipeline:
 
         print(f"Saved train/val/test splits to {out_dir}/")
 
-    def preprocess(self):
-        # self._fetch_data()
+    def preprocess(self) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Run the full preprocessing pipeline.
+
+        Steps:
+          1) Fetch raw data.
+          2) Join data.
+          3) Create cyclic features.
+          4) Drop unused columns.
+          5) Run schema/integrity checks.
+          6) Split into train/val/test.
+          7) Normalize numeric columns.
+          8) Save outputs.
+
+        Returns:
+            A tuple of (train_df, val_df, test_df).
+        """
+        self._fetch_data()
         self._join_data()
         self._create_cyclic_features()
         self._drop_columns(

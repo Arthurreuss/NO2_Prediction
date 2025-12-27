@@ -11,10 +11,26 @@ from src.models.hgru import HierarchicalGRUForecast
 from src.training.engine import fit_model
 from src.training.evaluate import evaluate_model
 from src.training.setup import get_dataloaders, setup_experiment
-from src.utils.hp_optimization_helper import set_hyperparameter_ranges
+from src.utils.helper import set_hyperparameter_ranges
 
 
-def objective(trial, ctx):
+def objective(trial: "optuna.trial.Trial", ctx: dict) -> float:
+    """
+    Objective function for Optuna hyperparameter optimization of a Hierarchical GRU model.
+
+    This function sets up the model, optimizer, loss function, and data loaders based on the provided
+    configuration and context. It then trains the model using the specified hyperparameters from the
+    Optuna trial, evaluates its performance, and logs relevant information to MLflow. The best validation
+    score achieved during training is returned as the objective value for optimization.
+
+    Args:
+        trial (optuna.trial.Trial): The Optuna trial object used to suggest hyperparameters.
+        ctx (dict): Context dictionary containing configuration, device, scaler, and other necessary objects.
+
+    Returns:
+        float: The best validation score (e.g., loss) achieved during training, to be minimized by Optuna.
+    """
+    print("Starting trial:", trial.number)
     cfg = ctx["cfg"]
     device = ctx["device"]
     data_cfg = cfg["data"]
@@ -52,7 +68,8 @@ def objective(trial, ctx):
     results_dir.mkdir(parents=True, exist_ok=True)
     trial_model_path = results_dir / f"hgru_trial_{trial.number}.pt"
 
-    with mlflow.start_run(nested=True):
+    with mlflow.start_run(run_name=f"HGRU_Trial_{trial.number}", nested=True) as run:
+        trial.set_user_attr("mlflow_run_id", run.info.run_id)
         mlflow.log_params(hp)
 
         best_score = fit_model(
@@ -74,7 +91,21 @@ def objective(trial, ctx):
     return best_score
 
 
-def main():
+def main() -> None:
+    """
+    Runs the hyperparameter optimization workflow for the Hierarchical GRU model using Optuna.
+
+    This function sets up the experiment context, creates and runs an Optuna study to optimize
+    the model's hyperparameters, evaluates the best model on the test set, logs the results and
+    model to MLflow, and cleans up saved model checkpoints.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
+
     ctx = setup_experiment(
         "config.yaml", experiment_name="HierHGRU_Optimization_Optuna"
     )
@@ -93,6 +124,7 @@ def main():
 
     print("\n--- Evaluating Best Model on Test Set ---")
     best_trial = study.best_trial
+    best_run_id = best_trial.user_attrs["mlflow_run_id"]
     best_hp = best_trial.params
     target_cols = cfg["data"]["target_cols"]
 
@@ -128,9 +160,15 @@ def main():
 
     print("Test Results:", test_metrics)
 
-    with mlflow.start_run(run_name="HierHGRU_Best_Test_Results"):
-        mlflow.log_params(best_hp)
+    with mlflow.start_run(run_id=best_run_id):
+        model_name = "hgru_best_model"
+        model_uri = f"runs:/{best_run_id}/{model_name}"
+        mlflow.pytorch.log_model(model, model_name)
+        mlflow.register_model(model_uri, model_name)
         mlflow.log_metrics({f"test_{k}": v for k, v in test_metrics.items()})
+
+    for f in Path("results/optuna_hgru").glob("hgru_trial_*.pt"):
+        f.unlink()
 
 
 if __name__ == "__main__":

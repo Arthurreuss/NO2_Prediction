@@ -5,16 +5,17 @@ import torch.nn as nn
 
 
 class HierarchicalGRUForecast(nn.Module):
-    """
-    Hierarchical GRU for multi-target air quality forecasting.
+    """Hierarchical GRU for multi-target air-quality forecasting.
 
-    - Level 1 (short-term): GRU over hourly inputs [B, L, F] -> [B, L, H_short]
-    - Temporal downsampling: group every `downsample_factor` hours and aggregate
-      to get [B, L_coarse, H_short]
-    - Level 2 (long-term): GRU over coarse sequence -> [B, L_coarse, H_long]
-    - Decoder: uses last coarse hidden state to predict horizon x targets
+    Architecture:
+      - Level 1 (short-term): GRU over hourly inputs [B, L, F] -> [B, L, H_short]
+      - Temporal downsampling: groups every `downsample_factor` steps and mean-pools
+        to produce a coarse sequence [B, L_coarse, H_short]
+      - Level 2 (long-term): GRU over coarse sequence -> hidden state [B, H_long]
+      - Decoder: maps final long-term hidden state to horizon x targets
 
-    Output shape: [B, horizon, T] where T = len(target_cols)
+    Output shape:
+        [B, horizon, T] where T = len(target_cols)
     """
 
     def __init__(
@@ -28,7 +29,21 @@ class HierarchicalGRUForecast(nn.Module):
         num_layers_short: int = 1,
         num_layers_long: int = 1,
         dropout: float = 0.2,
-    ):
+    ) -> None:
+        """Initialize the hierarchical GRU model.
+
+        Args:
+            input_size: Number of input features per time step.
+            target_cols: Names of target variables to predict.
+            horizon: Forecast horizon (number of future steps predicted).
+            downsample_factor: Number of fine-grained steps to aggregate into one
+                coarse step (e.g., 24 for daily aggregation from hourly inputs).
+            short_hidden_size: Hidden size of the short-term GRU.
+            long_hidden_size: Hidden size of the long-term GRU.
+            num_layers_short: Number of layers in the short-term GRU.
+            num_layers_long: Number of layers in the long-term GRU.
+            dropout: Dropout probability used in GRUs (when layers > 1) and decoder.
+        """
         super().__init__()
         self.input_size = input_size
         self.target_cols = target_cols
@@ -60,15 +75,18 @@ class HierarchicalGRUForecast(nn.Module):
         )
 
     def _downsample_hidden(self, h_seq: torch.Tensor) -> torch.Tensor:
-        """
-        Downsample hidden sequence by grouping every `downsample_factor` steps.
-        Uses mean pooling within each group.
+        """Downsample a hidden-state sequence via mean pooling over fixed groups.
+
+        The sequence is grouped into contiguous chunks of length
+        `self.downsample_factor` and averaged within each chunk. If the
+        sequence length is shorter than the downsample factor, the mean over
+        the full sequence is returned as a single coarse step.
 
         Args:
-            h_seq: [B, L, H_short]
+            h_seq: Hidden-state sequence of shape [batch_size, seq_len, H_short].
 
         Returns:
-            h_coarse: [B, L_coarse, H_short]
+            A coarse hidden-state sequence of shape [batch_size, seq_len_coarse, H_short].
         """
         B, L, Hs = h_seq.shape
         k = self.downsample_factor
@@ -86,12 +104,15 @@ class HierarchicalGRUForecast(nn.Module):
         return h_coarse
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
+        """Run a forward pass of the model.
+
         Args:
-            x: [B, L, F] normalized features
+            x: Input tensor of normalized features with shape
+                [batch_size, seq_len, input_size].
 
         Returns:
-            y_hat: [B, horizon, T]
+            A tensor of shape [batch_size, horizon, n_targets] containing the
+            model's forecasts for each target over the forecast horizon.
         """
         short_out, _ = self.short_gru(x)  # [B, L, H_short]
 

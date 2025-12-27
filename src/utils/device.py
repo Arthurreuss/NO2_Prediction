@@ -2,12 +2,24 @@ import torch
 
 
 def get_device(preferred: str | None = None) -> str:
-    """
-    Returns a valid device string among: 'cuda', 'mps', 'cpu'.
+    """Select and return an available compute device.
 
-    preferred:
-      - 'cuda', 'mps', 'cpu' -> try that first, fall back if unavailable
-      - 'auto' or None      -> auto-detect (cuda > mps > cpu)
+    This helper chooses a valid PyTorch device string among:
+    `"cuda"`, `"mps"`, or `"cpu"`.
+
+    Selection logic:
+      - If `preferred` is provided and is one of {"cuda", "mps", "cpu"},
+        that device is tried first and falls back to auto-detection if
+        unavailable.
+      - If `preferred` is `"auto"` or None, devices are auto-detected
+        in priority order: CUDA > MPS > CPU.
+
+    Args:
+        preferred: Optional preferred device identifier. Supported values
+            are `"cuda"`, `"mps"`, `"cpu"`, `"auto"`, or None.
+
+    Returns:
+        A string identifying the selected device: `"cuda"`, `"mps"`, or `"cpu"`.
     """
     if preferred is not None:
         preferred = preferred.lower()
