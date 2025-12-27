@@ -11,12 +11,35 @@ def inverse_target(
     numeric_cols: List[str],
     target_col: str,
 ) -> torch.Tensor:
-    """
-    Accepts y_norm shaped [N,H] or [N,H,1]. Returns [N,H] in original units.
+    """Inverse-transform a normalized target tensor back to original units.
+
+    This helper reconstructs a full feature matrix with zeros for all
+    non-target features so that a fitted scaler can be used to inverse-
+    transform only the target column.
+
+    Accepted input shapes:
+      - [N, H]
+      - [N, H, 1]
+
+    Output shape:
+      - [N, H]
+
+    Args:
+        scaler: Fitted scikit-learn scaler implementing `inverse_transform`.
+        y_norm: Normalized target tensor of shape [N, H] or [N, H, 1].
+        numeric_cols: List of numeric column names used when fitting the scaler.
+        target_col: Name of the target column to inverse-transform.
+
+    Returns:
+        A tensor of shape [N, H] containing the target values in original units.
+
+    Raises:
+        ValueError: If `y_norm` does not have shape [N, H] or [N, H, 1].
+        ValueError: If `target_col` is not found in `numeric_cols`.
     """
     y_norm = y_norm.detach().cpu()
 
-    # allow [N,H,1]
+    # allow [N, H, 1]
     if y_norm.ndim == 3 and y_norm.shape[-1] == 1:
         y_norm = y_norm[..., 0]
 

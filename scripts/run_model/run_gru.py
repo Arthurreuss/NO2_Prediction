@@ -12,7 +12,18 @@ from src.training.evaluate import evaluate_model
 from src.training.setup import get_dataloaders, log_hyperparameters, setup_experiment
 
 
-def main():
+def main() -> None:
+    """
+    Runs the GRU forecasting model training, validation, and testing pipeline.
+
+    This function sets up the experiment context, prepares data loaders, initializes the GRU model,
+    configures the optimizer and loss function, and manages the training loop with early stopping.
+    It logs hyperparameters and metrics to MLflow, saves the best model checkpoint, and evaluates
+    the model on the test set.
+
+    Returns:
+        None
+    """
     ctx = setup_experiment("config.yaml")
     cfg, device = ctx["cfg"], ctx["device"]
     train_loader, val_loader, test_loader = get_dataloaders(cfg, multi_target=False)
@@ -63,7 +74,7 @@ def main():
             log_mlflow=True,
         )
 
-        print(f"Loading best model: {save_path}")
+        print(f"Loading best model from {save_path}")
         model.load_state_dict(torch.load(save_path, map_location=device))
 
         test_metrics = validate_fn(model=model, dataloader=test_loader, device=device)

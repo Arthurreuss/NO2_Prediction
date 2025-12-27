@@ -19,13 +19,41 @@ def evaluate_model(
     target_col: Optional[str] = None,
     all_target_cols: Optional[List[str]] = None,
 ) -> Dict[str, float]:
-    """
-    Generic evaluation loop that supports both single-target and multi-target models.
+    """Evaluate a model on a dataloader for single-target or multi-target forecasting.
+
+    This evaluation loop:
+      - runs the model in eval mode
+      - computes average loss over all batches
+      - aggregates predictions and targets across the entire dataset
+      - computes RMSE and SMAPE in normalized space
+      - optionally denormalizes a selected target and computes RMSE/SMAPE in
+        original units
 
     Args:
-        all_target_cols: List of all target names corresponding to the model output channels.
-                         Required if the model outputs multiple targets but you only want
-                         to denormalize/measure 'target_col'.
+        model: PyTorch model to evaluate.
+        dataloader: DataLoader yielding (x, y) batches.
+        device: Device identifier used by `Tensor.to(device)`.
+        loss_fn: Loss function used to compute batch loss.
+        scaler: Optional fitted scaler used to inverse-transform the target.
+        numeric_cols: Optional list of numeric column names used by the scaler.
+        target_col: Optional name of the target column to denormalize/measure.
+        all_target_cols: Optional list of all target names corresponding to the
+            model output channels. Required if the model outputs multiple targets
+            but you only want to denormalize/measure `target_col`.
+
+    Returns:
+        A dictionary of evaluation metrics. Always includes:
+            - "val_loss"
+            - "rmse_norm"
+            - "smape_norm"
+        Additionally includes denormalized metrics when `scaler`, `numeric_cols`,
+        and `target_col` are provided:
+            - "rmse"
+            - "score" (alias of denormalized RMSE)
+            - "smape"
+
+    Raises:
+        ValueError: If `all_target_cols` is provided but does not contain `target_col`.
     """
     model.eval()
     total_loss = 0.0
@@ -47,7 +75,7 @@ def evaluate_model(
     y_true = torch.cat(y_true_all, dim=0)  # [N, H] or [N, H, F]
     y_pred = torch.cat(y_pred_all, dim=0)
 
-    metrics = {
+    metrics: Dict[str, float] = {
         "val_loss": total_loss / max(n_batches, 1),
         "rmse_norm": rmse(y_true, y_pred),
         "smape_norm": smape(y_true, y_pred),
@@ -87,7 +115,31 @@ def evaluate_persistence(
     scaler=None,
     numeric_cols=None,
     target_col: str = None,
-):
+) -> Dict[str, float]:
+    """Evaluate a persistence baseline on a dataset.
+
+    This function runs a persistence-style model that implements
+    `predict_batch(xb, horizon)` and computes RMSE and SMAPE over all samples.
+    If a scaler is provided, predictions and targets are inverse-transformed
+    before metric computation.
+
+    Args:
+        loader: Iterable yielding (xb, yb) batches.
+        model: Persistence model implementing `predict_batch`.
+        horizon: Forecast horizon (number of future time steps predicted).
+        scaler: Optional fitted scaler used to inverse-transform the target.
+        numeric_cols: Optional list of numeric column names used by the scaler.
+        target_col: Optional name of the target column to denormalize/measure.
+
+    Returns:
+        A dictionary containing:
+            - "rmse": Root mean squared error.
+            - "smape": Symmetric mean absolute percentage error (in percent).
+
+    Raises:
+        ValueError: If `scaler` is provided but `numeric_cols` or `target_col`
+            are not provided.
+    """
     y_true_all, y_pred_all = [], []
 
     with torch.no_grad():

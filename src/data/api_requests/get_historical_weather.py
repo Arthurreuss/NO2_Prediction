@@ -1,13 +1,35 @@
 from pathlib import Path
+from typing import Any, Dict
 
 import pandas as pd
 import requests
 
 
-def fetch_weather_data(cfg: dict) -> None:
-    """
-    Fetch historical weather data from Open-Meteo for all locations
-    defined in cfg['api_requests']['locations'] and save as CSV.
+def fetch_weather_data(cfg: Dict[str, Any]) -> None:
+    """Fetch historical weather data from the Open-Meteo API and save as CSV files.
+
+    This function iterates over all locations defined in
+    `cfg["api_requests"]["locations"]`, fetches hourly weather data from
+    the Open-Meteo Weather API for the specified date range, and stores
+    the results as CSV files under `data/raw/weather/`.
+
+    The output CSV files are named following the pattern:
+        "<location>_weather_<start_date>_to_<end_date>.csv"
+
+    Args:
+        cfg: Configuration dictionary containing API settings. Expected
+            structure includes:
+            - cfg["api_requests"]["weather_api_base_url"]
+            - cfg["api_requests"]["weather_params"]
+            - cfg["api_requests"]["locations"]
+            - cfg["api_requests"]["time"]["start_date"]
+            - cfg["api_requests"]["time"]["end_date"]
+
+    Returns:
+        None. The function writes CSV files to disk as a side effect.
+
+    Raises:
+        requests.HTTPError: If the API request returns a non-success status code.
     """
     api_cfg = cfg["api_requests"]
     base_url = api_cfg["weather_api_base_url"]

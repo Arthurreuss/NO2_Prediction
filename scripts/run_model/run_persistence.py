@@ -6,7 +6,19 @@ from src.training.evaluate import evaluate_persistence
 from src.training.setup import get_dataloaders, setup_experiment
 
 
-def main():
+def main() -> None:
+    """
+    Runs the persistence model experiment using the provided configuration.
+
+    This function sets up the experiment context, loads validation and test data loaders,
+    initializes the persistence model, and evaluates it on both validation and test sets.
+    The results, including metrics and parameters, are logged to MLflow.
+
+    Raises:
+        FileNotFoundError: If the configuration file ("config.yaml") is not found.
+        KeyError: If required keys are missing in the configuration or context.
+        Exception: For any errors during model evaluation or logging.
+    """
     ctx = setup_experiment("config.yaml")
     cfg, device = ctx["cfg"], ctx["device"]
 
