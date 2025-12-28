@@ -9,12 +9,28 @@ def detect_outliers_zscore(
     cols: Optional[List[str]] = None,
     z_thresh: float = 3.0,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Detect outliers using a z-score threshold.
+    """Detect outliers using a z-score threshold.
+
+    For each selected numeric column, the z-score is computed as:
+        (x - mean) / std
+
+    A value is flagged as an outlier if its absolute z-score exceeds
+    the given threshold.
+
+    Args:
+        df: Input DataFrame containing the data to analyze.
+        cols: Optional list of column names to check for outliers.
+            If None, all numeric columns in `df` are used.
+        z_thresh: Z-score threshold above which a value is considered
+            an outlier.
 
     Returns:
-        - outlier_mask: DataFrame of boolean values (True = outlier)
-        - summary: DataFrame with counts and percentage for each column
+        A tuple containing:
+            - outlier_mask: A DataFrame of boolean values with the same
+              shape as the selected columns, where True indicates an
+              outlier.
+            - summary: A DataFrame summarizing the number and percentage
+              of outliers per column, sorted by percentage descending.
     """
     if cols is None:
         cols = df.select_dtypes(include=[np.number]).columns.tolist()
@@ -43,12 +59,28 @@ def detect_outliers_iqr(
     cols: Optional[List[str]] = None,
     iqr_multiplier: float = 1.5,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Detect outliers using the IQR rule.
+    """Detect outliers using the Interquartile Range (IQR) rule.
+
+    For each selected numeric column, values are flagged as outliers if
+    they fall outside the range:
+        [Q1 - iqr_multiplier * IQR, Q3 + iqr_multiplier * IQR]
+
+    where:
+        IQR = Q3 - Q1
+
+    Args:
+        df: Input DataFrame containing the data to analyze.
+        cols: Optional list of column names to check for outliers.
+            If None, all numeric columns in `df` are used.
+        iqr_multiplier: Multiplier applied to the IQR to determine the
+            lower and upper bounds for outlier detection.
 
     Returns:
-        - outlier_mask: DataFrame of boolean values (True = outlier)
-        - summary: DataFrame with counts and percentage for each column
+        A tuple containing:
+            - outlier_mask: A DataFrame of boolean values with one column
+              per analyzed feature, where True indicates an outlier.
+            - summary: A DataFrame summarizing the number and percentage
+              of outliers per column, sorted by percentage descending.
     """
     if cols is None:
         cols = df.select_dtypes(include=[np.number]).columns.tolist()
