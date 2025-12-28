@@ -5,11 +5,17 @@ import torch.nn as nn
 
 
 class MultiGRUForecast(nn.Module):
-    """
-    Hierarchical GRU:
-      - shared GRU backbone over all features
-      - separate MLP branch per pollutant (subtask)
-    Returns tensor of shape [B, H, T] with T = n_targets.
+    """Multi-target GRU forecaster with a shared backbone and per-target branches.
+
+    Architecture:
+      - Shared GRU backbone over all input features to produce a shared representation.
+      - Separate MLP branch per target (subtask) to predict a full horizon.
+
+    Output shape:
+        [B, H, T] where:
+          - B is batch size
+          - H is forecast horizon
+          - T is the number of targets (len(target_cols))
     """
 
     def __init__(
@@ -21,7 +27,20 @@ class MultiGRUForecast(nn.Module):
         branch_hidden_size: int = 16,
         num_layers: int = 1,
         dropout: float = 0.2,
-    ):
+    ) -> None:
+        """Initialize the multi-target GRU forecasting model.
+
+        Args:
+            input_size: Number of input features per time step.
+            target_cols: Names of target variables to predict.
+            horizon: Forecast horizon (number of future steps predicted).
+            shared_hidden_size: Hidden size of the shared GRU backbone.
+            branch_hidden_size: Hidden size of each target-specific MLP branch.
+            num_layers: Number of stacked GRU layers in the shared backbone.
+            dropout: Dropout probability applied after the shared GRU output and
+                within each target-specific branch. GRU-internal dropout is only
+                active when `num_layers > 1`.
+        """
         super().__init__()
         self.target_cols = target_cols
         self.horizon = horizon
@@ -43,18 +62,23 @@ class MultiGRUForecast(nn.Module):
                 nn.Dropout(dropout),
                 nn.Linear(branch_hidden_size, horizon),
             )
-        self.branches = nn.ModuleDict(branches)
+        self.branches: nn.ModuleDict = nn.ModuleDict(branches)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: [B, L, F]
-        returns: y_hat [B, H, T] where T = len(target_cols)
+        """Run a forward pass of the model.
+
+        Args:
+            x: Input tensor of shape [batch_size, seq_len, input_size].
+
+        Returns:
+            A tensor of shape [batch_size, horizon, n_targets] containing the
+            forecast for each target over the full horizon.
         """
         out, _ = self.gru(x)  # [B, L, Hshared]
         h_last = out[:, -1, :]  # [B, Hshared]
         h_last = self.shared_dropout(h_last)
 
-        preds = []
+        preds: List[torch.Tensor] = []
         for name in self.target_cols:
             y_t = self.branches[name](h_last)  # [B, H]
             preds.append(y_t.unsqueeze(-1))  # [B, H, 1]

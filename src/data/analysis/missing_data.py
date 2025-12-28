@@ -4,12 +4,22 @@ import seaborn as sns
 
 
 def assess_missing_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Compute missing data statistics per column.
-    Returns a DataFrame with:
-      - n_missing
-      - missing_pct
-      - dtype
+    """Compute missing-data statistics per column.
+
+    This function calculates the absolute and relative amount of missing
+    values for each column in the input DataFrame and reports the column
+    data types. The resulting summary is sorted by missing percentage in
+    descending order.
+
+    Args:
+        df: Input DataFrame for which missing data should be analyzed.
+
+    Returns:
+        A DataFrame indexed by column name with the following columns:
+            - dtype: Data type of the column (as string).
+            - n_missing: Number of missing (NaN) values in the column.
+            - missing_pct: Percentage of missing values relative to the
+              total number of rows.
     """
     n_rows = len(df)
     missing_counts = df.isna().sum()
@@ -30,11 +40,18 @@ def assess_missing_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_missing_heatmap(df: pd.DataFrame) -> None:
-    """
-    Visualize missingness as a heatmap with ALL feature names shown on the Y axis.
-    Rows = features, Columns = samples.
-    """
+    """Visualize missing values in a DataFrame as a heatmap.
 
+    The heatmap shows missingness (NaN values) across the entire DataFrame:
+        - Rows correspond to features (columns in the original DataFrame).
+        - Columns correspond to samples (rows in the original DataFrame).
+
+    All feature names are displayed on the Y-axis to provide a complete
+    overview of missing data patterns.
+
+    Args:
+        df: Input DataFrame whose missing values should be visualized.
+    """
     missing = df.isna().T
     n_features = missing.shape[0]
 
@@ -53,3 +70,6 @@ def plot_missing_heatmap(df: pd.DataFrame) -> None:
 
     plt.tight_layout()
     plt.show()
+
+
+å

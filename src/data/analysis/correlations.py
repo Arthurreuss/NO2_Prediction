@@ -9,8 +9,19 @@ import seaborn as sns
 def compute_correlation_matrix(
     df: pd.DataFrame, method: str = "pearson"
 ) -> pd.DataFrame:
-    """
-    Compute correlation matrix for numeric features.
+    """Compute a correlation matrix for numeric features in a DataFrame.
+
+    This function selects all numeric columns from the input DataFrame and
+    computes their pairwise correlations using the specified method.
+
+    Args:
+        df: Input DataFrame containing the data.
+        method: Correlation method to use. Common options include
+            "pearson", "spearman", and "kendall".
+
+    Returns:
+        A pandas DataFrame representing the correlation matrix of all
+        numeric features.
     """
     df_num = df.select_dtypes(include=[np.number])
     corr = df_num.corr(method=method)
@@ -25,8 +36,18 @@ def plot_correlation_heatmap(
     figsize: Tuple[int, int] = (12, 10),
     vmax: float = 1.0,
 ) -> None:
-    """
-    Plot correlation heatmap for numeric features.
+    """Plot a correlation heatmap for numeric features.
+
+    This function computes the correlation matrix for numeric columns and
+    visualizes it as a heatmap using seaborn.
+
+    Args:
+        df: Input DataFrame containing the data.
+        method: Correlation method to use. Common options include
+            "pearson", "spearman", and "kendall".
+        figsize: Size of the matplotlib figure as (width, height).
+        vmax: Maximum absolute value for the color scale. The minimum is
+            set to -vmax.
     """
     corr = df.select_dtypes(include=[np.number]).corr(method=method)
     plt.figure(figsize=figsize)
@@ -41,9 +62,25 @@ def correlations_with_target(
     target_col: str,
     method: str = "pearson",
 ) -> pd.Series:
-    """
-    Compute correlation of all numeric features with a given target column.
-    Returns a Series sorted by absolute correlation descending.
+    """Compute correlations of numeric features with a target column.
+
+    This function computes the correlation between each numeric feature
+    and a specified target column, then sorts the results by absolute
+    correlation value in descending order.
+
+    Args:
+        df: Input DataFrame containing the data.
+        target_col: Name of the target column to correlate against.
+        method: Correlation method to use. Common options include
+            "pearson", "spearman", and "kendall".
+
+    Returns:
+        A pandas Series containing correlations between each numeric
+        feature and the target column, sorted by absolute correlation
+        descending.
+
+    Raises:
+        ValueError: If `target_col` is not present in the input DataFrame.
     """
     if target_col not in df.columns:
         raise ValueError(f"target_col '{target_col}' not found in DataFrame.")

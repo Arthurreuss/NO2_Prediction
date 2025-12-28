@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 
-def cross_pollutant_importance_multi_gru(
+def cross_pollutant_importance(
     model: nn.Module,
     loader,
     device: torch.device,
@@ -13,39 +13,47 @@ def cross_pollutant_importance_multi_gru(
     pollutants_of_interest: List[str],
     max_batches: int = 10,
 ) -> Dict[str, float]:
-    """
-    Compute gradient-based cross-pollutant importance for NO2 prediction.
+    """Estimate cross-pollutant importance via input-gradient attribution.
 
-    Assumes:
-      - model(x) -> [B, H, T] where T = len(target_cols)
-      - NO2 is one of target_cols ("nitrogen_dioxide")
-      - pollutants_of_interest are column names in feature_cols
+    This function computes gradient-based importance scores for a set of
+    pollutant features with respect to the model's NO2 predictions. For each
+    batch (up to `max_batches`), it:
+      - enables gradients on the input tensor `x`
+      - computes model predictions `y_hat`
+      - selects the NO2 output channel and sums it to form a scalar score
+      - backpropagates to obtain gradients of the score w.r.t. inputs
+      - aggregates absolute gradients for each pollutant-of-interest feature
+
+    The returned importance for each pollutant is the mean absolute gradient
+    per input element (averaged over batch and time dimensions).
+
+    Args:
+        model: A PyTorch model producing outputs shaped [B, H, T], where T
+            corresponds to `target_cols`.
+        loader: Iterable yielding (x, y) batches.
+        device: Torch device on which computation is performed.
+        feature_cols: Ordered list of feature names corresponding to the last
+            dimension of `x`.
+        target_cols: Ordered list of target names corresponding to the last
+            dimension of `y_hat`.
+        pollutants_of_interest: List of pollutant feature names to score. Only
+            those present in `feature_cols` are used.
+        max_batches: Maximum number of batches from `loader` to process.
 
     Returns:
-      dict: pollutant_name -> average |∂y_NO2 / ∂x_pollutant|
-            aggregated over batch and time steps.
+        A dictionary mapping pollutant feature names to mean absolute gradient
+        importance scores.
     """
     model.eval()
-
     no2_name = "nitrogen_dioxide"
-    if no2_name not in target_cols:
-        raise ValueError(f"{no2_name} not found in target_cols: {target_cols}")
     no2_idx = target_cols.index(no2_name)
 
-    pollutant_to_idx: Dict[str, int] = {}
-    for p in pollutants_of_interest:
-        if p not in feature_cols:
-            continue
-        pollutant_to_idx[p] = feature_cols.index(p)
-
-    if not pollutant_to_idx:
-        raise ValueError(
-            f"None of the pollutants_of_interest are in feature_cols. "
-            f"pollutants_of_interest={pollutants_of_interest}, feature_cols={feature_cols}"
-        )
+    pollutant_to_idx = {
+        p: feature_cols.index(p) for p in pollutants_of_interest if p in feature_cols
+    }
 
     grad_sums: Dict[str, float] = {p: 0.0 for p in pollutant_to_idx}
-    sample_count = 0
+    total_elements = 0
 
     for b_idx, (x, y) in enumerate(loader):
         if b_idx >= max_batches:
@@ -53,24 +61,24 @@ def cross_pollutant_importance_multi_gru(
 
         x = x.to(device)
         x.requires_grad_(True)
+
         model.zero_grad()
+        if x.grad is not None:
+            x.grad.zero_()
 
         y_hat = model(x)  # [B, H, T]
         y_no2 = y_hat[..., no2_idx]  # [B, H]
-        score = y_no2.mean()
-        score.backward()
 
-        grad = x.grad.detach().abs().cpu()  # [B, L, F]
+        score = y_no2.sum()
+        score.backward()
+        grad = x.grad.detach().abs().cpu()
+
         B, L, F = grad.shape
-        sample_count += B
+        total_elements += B * L
 
         for p, j in pollutant_to_idx.items():
             grad_sums[p] += grad[:, :, j].sum().item()
 
-    if sample_count == 0:
-        raise RuntimeError("No batches processed for cross-pollutant attribution.")
-
-    norm_factor = float(sample_count * L)
-    pollutant_importance = {p: grad_sums[p] / norm_factor for p in pollutant_to_idx}
+    pollutant_importance = {p: val / total_elements for p, val in grad_sums.items()}
 
     return pollutant_importance
