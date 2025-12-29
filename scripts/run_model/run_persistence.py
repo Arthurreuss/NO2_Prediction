@@ -15,11 +15,11 @@ def main() -> None:
     The results, including metrics and parameters, are logged to MLflow.
 
     Raises:
-        FileNotFoundError: If the configuration file ("config.yaml") is not found.
+        FileNotFoundError: If the configuration file ("config_training.yaml") is not found.
         KeyError: If required keys are missing in the configuration or context.
         Exception: For any errors during model evaluation or logging.
     """
-    ctx = setup_experiment("config.yaml")
+    ctx = setup_experiment("config_training.yaml")
     cfg, device = ctx["cfg"], ctx["device"]
 
     _, val_loader, test_loader = get_dataloaders(ctx, multi_target=False)

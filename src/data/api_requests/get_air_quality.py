@@ -17,13 +17,7 @@ def fetch_air_quality_data(cfg: Dict[str, Any]) -> None:
         "<location>_air_quality_<start_date>_to_<end_date>.csv"
 
     Args:
-        cfg: Configuration dictionary containing API settings. Expected
-            structure includes:
-            - cfg["api_requests"]["air_quality_api_base_url"]
-            - cfg["api_requests"]["air_quality_params"]
-            - cfg["api_requests"]["locations"]
-            - cfg["api_requests"]["time"]["start_date"]
-            - cfg["api_requests"]["time"]["end_date"]
+        cfg: Configuration dictionary containing API settings.
 
     Returns:
         None. The function writes CSV files to disk as a side effect.
@@ -43,7 +37,7 @@ def fetch_air_quality_data(cfg: Dict[str, Any]) -> None:
     start_date = time_cfg["start_date"]
     end_date = time_cfg["end_date"]
 
-    out_dir = Path("data/raw/air_quality")
+    out_dir = Path(api_cfg["raw_dir"]) / "air_quality"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for loc_name, loc_cfg in locations.items():

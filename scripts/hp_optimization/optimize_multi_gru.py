@@ -106,7 +106,8 @@ def main() -> None:
         None
     """
     ctx = setup_experiment(
-        "config.yaml", experiment_name="MultiGRU_Optimization_Optuna"
+        "config_training.yaml",
+        experiment_name="MultiGRU_Optimization_Optuna_extra_metrics_and_time_features",
     )
     cfg = ctx["cfg"]
     device = ctx["device"]

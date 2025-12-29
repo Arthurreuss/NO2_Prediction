@@ -1,7 +1,9 @@
 from src.interpret.cross_pollutant_attribution import cross_pollutant_importance
 from src.interpret.feature_importance import permutation_importance
 from src.interpret.temporal_attribution import compute_saliency_gru, summarize_saliency
-from src.training.setup import get_dataloaders, setup_experiment
+from src.training.setup import get_dataloaders
+from src.utils.cfg import load_config
+from src.utils.device import get_device
 from src.utils.helper import load_torch_model_from_registry
 
 
@@ -9,7 +11,6 @@ def main() -> None:
     """Run a combined interpretability analysis for multiple registered models.
 
     This script:
-      - sets up an experiment context (config, MLflow experiment, device, etc.)
       - loads feature/target metadata from config
       - creates a test DataLoader (multi-target)
       - iterates over a list of registered model names and runs:
@@ -23,9 +24,8 @@ def main() -> None:
     Returns:
         None.
     """
-    ctx = setup_experiment("config.yaml", experiment_name="Interpretability_Combined")
-    cfg = ctx["cfg"]
-    device = ctx["device"]
+    cfg = load_config("config_training.yaml")
+    device = get_device(cfg["training"].get("device", "auto"))
 
     model_names = ["multigru_best_model", "hgru_best_model", "gru_best_model"]
 

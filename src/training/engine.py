@@ -114,18 +114,16 @@ def fit_model(
         )
 
         metrics = validate_fn(model=model, dataloader=val_loader, device=device)
-        current_score = metrics.get(
-            "rmse", metrics.get("score", metrics.get("val_loss"))
-        )
+        current_score = metrics["score"]
 
         print(
-            f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Score: {current_score:.4f} | RMSE: {metrics.get('rmse', float('nan')):.4f} | SMAPE: {metrics.get('smape', float('nan')):.4f}"
+            f"Epoch {epoch+1} | Train Loss: {train_loss:.4f} | Val Score: {current_score:.4f}"
         )
 
         if log_mlflow:
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             for k, v in metrics.items():
-                mlflow.log_metric(k, float(v), step=epoch)
+                mlflow.log_metric(f"val_{k}", float(v), step=epoch)
 
         # Optuna Pruning
         if trial:
