@@ -70,6 +70,3 @@ def plot_missing_heatmap(df: pd.DataFrame) -> None:
 
     plt.tight_layout()
     plt.show()
-
-
-å

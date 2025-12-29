@@ -9,3 +9,5 @@ test.py
 results/
 mlruns/
 mlflow.db
+.env
+deployment/

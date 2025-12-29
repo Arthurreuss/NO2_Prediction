@@ -107,7 +107,7 @@ def main() -> None:
     """
 
     ctx = setup_experiment(
-        "config.yaml", experiment_name="HierHGRU_Optimization_Optuna"
+        "onfig_training.yaml", experiment_name="HierHGRU_Optimization_Optuna"
     )
     cfg = ctx["cfg"]
     device = ctx["device"]
