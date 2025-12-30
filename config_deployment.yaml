@@ -44,6 +44,12 @@ data:
     - pm2_5
     - ozone
     - nitrogen_dioxide
+    - hour_sin
+    - hour_cos
+    - dayofweek_sin
+    - dayofweek_cos
+    - month_sin
+    - month_cos
   target_col: nitrogen_dioxide
   target_cols:
     - nitrogen_dioxide
@@ -56,5 +62,11 @@ data:
 
 deployment:
   migration:
-    dags_uri: https://dagshub.com/Arthurreuss/NO2_Forecasting
+    dags_uri: https://dagshub.com/Arthurreuss/NO2_Forecasting.mlflow
     scaler_path: data/training/processed/utrecht/scaler.pkl
+  models:
+    MultiGRU: NO2_Forecasting_MultiGRU
+    HGRU: NO2_Forecasting_HGRU
+    GRU: NO2_Forecasting_GRU
+  predictions_dir: "data/deployment/predictions"
+  history_path: "data/deployment/processed/continuous_history.parquet"
