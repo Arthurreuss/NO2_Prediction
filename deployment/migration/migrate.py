@@ -11,7 +11,23 @@ from src.utils.device import get_device
 from src.utils.helper import load_torch_model_from_registry
 
 
-def migrate():
+def migrate() -> None:
+    """Migrate locally-registered models to a remote MLflow registry (DagsHub).
+
+    This function performs a three-step migration:
+      1) Loads models from the local MLflow model registry (by name/alias).
+      2) Switches MLflow tracking and registry URIs to the remote DagsHub instance.
+      3) Logs each model as an MLflow PyFunc model using `ModelWrapper`, bundling
+         a local scaler artifact path and a serialized torch model artifact, and
+         registers the model under new registry names.
+
+    Temporary files:
+      - Writes each torch model to `temp_weights.pt` before logging to MLflow.
+      - Deletes `temp_weights.pt` at the end if present.
+
+    Returns:
+        None.
+    """
     load_dotenv()
     device = get_device()
     cfg = load_config("config_deployment.yaml")
