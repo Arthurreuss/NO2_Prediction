@@ -1,6 +1,7 @@
 import os
 import traceback
 from datetime import datetime, timedelta
+from typing import Any, Dict, Tuple
 
 import mlflow
 import numpy as np
@@ -22,14 +23,41 @@ torch.serialization.add_safe_globals(
 _ORIGINAL_TORCH_LOAD = torch.load
 
 
-def unsafe_torch_load(*args, **kwargs):
-    """Helper to force weights_only=False during model loading."""
+def unsafe_torch_load(*args: Any, **kwargs: Any) -> Any:
+    """Force `weights_only=False` during torch model loading.
+
+    This helper wraps the original `torch.load` and injects
+    `weights_only=False` into the keyword arguments.
+
+    Args:
+        *args: Positional arguments forwarded to `torch.load`.
+        **kwargs: Keyword arguments forwarded to `torch.load`.
+
+    Returns:
+        The deserialized object returned by the original `torch.load`.
+    """
     kwargs["weights_only"] = False
     return _ORIGINAL_TORCH_LOAD(*args, **kwargs)
 
 
 class DeploymentPipeline:
-    def __init__(self, config_path="config_deployment.yaml"):
+    """End-to-end deployment pipeline for fetching data, forecasting, and saving results.
+
+    The pipeline:
+      - configures an API request window
+      - fetches and preprocesses recent observations
+      - updates a local history store
+      - loads registered MLflow models and associated scalers
+      - scales inputs, runs inference, denormalizes outputs
+      - persists predictions to parquet files
+    """
+
+    def __init__(self, config_path: str = "config_deployment.yaml") -> None:
+        """Initialize the deployment pipeline from a configuration file.
+
+        Args:
+            config_path: Path to the deployment configuration YAML.
+        """
         self.cfg = load_config(config_path)
         self.feature_cols = self.cfg["data"]["feature_cols"]
         self.target_cols = self.cfg["data"]["target_cols"]
@@ -43,8 +71,12 @@ class DeploymentPipeline:
             "https://dagshub.com/Arthurreuss/NO2_Forecasting.mlflow"
         )
 
-    def setup_time_window(self):
-        """Configures the API request window (last 8 days)."""
+    def setup_time_window(self) -> None:
+        """Configure the API request window (last 8 days).
+
+        Updates `self.cfg["api_requests"]["time"]` with `start_date` and `end_date`
+        formatted as YYYY-MM-DD.
+        """
         today = datetime.now()
         start_dt = today - timedelta(days=8)
         end_dt = today
@@ -57,8 +89,17 @@ class DeploymentPipeline:
             }
         )
 
-    def fetch_and_process_data(self):
-        """Runs the preprocessing pipeline and returns the observed data."""
+    def fetch_and_process_data(self) -> pd.DataFrame:
+        """Run preprocessing and return the observed portion of the dataset.
+
+        This method:
+          - runs the preprocessing pipeline
+          - converts time to UTC
+          - filters out any rows beyond the current UTC hour
+
+        Returns:
+            A DataFrame containing observed data up to the current UTC hour.
+        """
         print("Fetching data...")
         pipeline = PreProcessingPipeline(cfg=self.cfg)
         df, _, _ = pipeline.preprocess(deployment=True)
@@ -69,8 +110,15 @@ class DeploymentPipeline:
         df_observed = df[df["time"] <= current_hour_utc].copy()
         return df_observed
 
-    def update_history(self, df_observed: pd.DataFrame):
-        """Updates the local parquet file with new observations."""
+    def update_history(self, df_observed: pd.DataFrame) -> None:
+        """Update the local history parquet file with new observations.
+
+        If the history file exists, new observations are appended and duplicates
+        are dropped based on the "time" column, keeping the latest occurrence.
+
+        Args:
+            df_observed: DataFrame of newly observed rows to add to history.
+        """
         os.makedirs(os.path.dirname(self.history_file), exist_ok=True)
 
         if os.path.exists(self.history_file):
@@ -82,10 +130,28 @@ class DeploymentPipeline:
         else:
             df_observed.to_parquet(self.history_file)
 
-    def _load_model_and_scaler(self, model_name: str, stage: str = "production"):
-        """
-        Loads the PyFunc model (forcing CPU) and extracts the scaler.
-        Includes monkey-patching for 'weights_only=False'.
+    def _load_model_and_scaler(
+        self, model_name: str, stage: str = "production"
+    ) -> Tuple[Any, Any]:
+        """Load an MLflow PyFunc model and extract its scaler.
+
+        This method:
+          - loads the model from the MLflow registry (forcing CPU)
+          - temporarily monkey-patches `torch.load` to force `weights_only=False`
+          - unwraps the underlying Python model to access `model` and `scaler`
+          - moves the underlying torch model to CPU if present
+
+        Args:
+            model_name: Registered model name in MLflow.
+            stage: Model stage or alias to load (e.g., "production").
+
+        Returns:
+            A tuple `(loaded_model, scaler)` where:
+              - loaded_model is the MLflow PyFunc model object
+              - scaler is the extracted scaler attached to the unwrapped model
+
+        Raises:
+            AttributeError: If the unwrapped model does not provide a `scaler`.
         """
         model_uri = f"models:/{model_name}@{stage}"
         print(f"Loading {model_name}...")
@@ -107,14 +173,23 @@ class DeploymentPipeline:
 
         return loaded_model, custom_model.scaler
 
-    def _scale_input(self, input_values: pd.DataFrame, scaler) -> pd.DataFrame:
-        """
-        Handles the complexity of scaling:
-        1. Checks what cols the scaler expects (feature_names_in_)
-        2. Creates dummy columns for missing features
-        3. Scales and returns the updated dataframe
-        """
+    def _scale_input(self, input_values: pd.DataFrame, scaler: Any) -> pd.DataFrame:
+        """Scale input features using the provided scaler.
 
+        This method:
+          1) reads the scaler's expected column ordering from `feature_names_in_`
+          2) creates dummy columns with zeros for any missing expected features
+          3) transforms values and writes scaled values back into the original
+             `input_values` for columns that overlap
+
+        Args:
+            input_values: DataFrame containing input feature columns to scale.
+            scaler: Fitted scaler object with `feature_names_in_` and `transform`.
+
+        Returns:
+            The updated `input_values` DataFrame with scaled values for the
+            overlapping columns.
+        """
         scaler_cols = scaler.feature_names_in_
         df_for_scaling = input_values.copy()
         missing_cols = set(scaler_cols) - set(df_for_scaling.columns)
@@ -132,11 +207,24 @@ class DeploymentPipeline:
 
         return input_values
 
-    def _denormalize(self, prediction: np.ndarray, scaler) -> np.ndarray:
-        """
-        Robust denormalization.
-        Handles cases where the model predicts fewer columns (e.g., 1)
-        than the scaler expects (e.g., 4).
+    def _denormalize(self, prediction: np.ndarray, scaler: Any) -> np.ndarray:
+        """Denormalize model predictions into original units.
+
+        This method supports cases where the model outputs fewer target columns
+        than the scaler expects. It reconstructs a dummy feature matrix sized
+        to the scaler's expected features and inserts the predicted target
+        columns into their respective indices before applying `inverse_transform`.
+
+        Args:
+            prediction: Array of model predictions. The total number of elements
+                determines whether the output is interpreted as single-target
+                (size == horizon) or multi-target (size divisible by horizon).
+            scaler: Fitted scaler object with `feature_names_in_` and
+                `inverse_transform`.
+
+        Returns:
+            A denormalized numpy array containing rescaled predictions for the
+            predicted target columns.
         """
         scaler_cols = list(scaler.feature_names_in_)
         n_scaler_features = len(scaler_cols)
@@ -178,9 +266,26 @@ class DeploymentPipeline:
         rescaled_prediction = rescaled_dummy[:, scaler_target_indices]
         return rescaled_prediction
 
-    def run_inference(self, df_input_raw: pd.DataFrame) -> dict:
-        """Iterates over all defined models and generates forecasts."""
-        forecasts = {}
+    def run_inference(self, df_input_raw: pd.DataFrame) -> Dict[str, Any]:
+        """Run inference for all configured models and return forecasts.
+
+        For each model in `self.models_map`, this method:
+          1) loads the model and scaler
+          2) scales the input feature DataFrame
+          3) generates predictions via the MLflow PyFunc model
+          4) denormalizes predictions to real units
+          5) formats output as a dict mapping target names to lists of values
+
+        Args:
+            df_input_raw: Input DataFrame containing at least the configured
+                feature columns.
+
+        Returns:
+            A dictionary mapping model display names to either:
+              - a dict of {target_name: list_of_predictions}, or
+              - the string "Error" if inference failed for that model.
+        """
+        forecasts: Dict[str, Any] = {}
 
         for name, model_name in self.models_map.items():
             print(f"Processing {name}...")
@@ -218,10 +323,18 @@ class DeploymentPipeline:
 
         return forecasts
 
-    def save_results(self, df_input_raw: pd.DataFrame, forecasts: dict):
-        """
-        Saves forecasts to individual parquet files per model.
-        Updates existing files by overwriting overlapping timestamps with the latest prediction.
+    def save_results(
+        self, df_input_raw: pd.DataFrame, forecasts: Dict[str, Any]
+    ) -> None:
+        """Save forecasts to parquet files per model.
+
+        Forecasts are saved to individual parquet files under `self.output_dir`.
+        If a model's prediction file already exists, the new predictions are
+        appended (with overlap handling described in the docstring).
+
+        Args:
+            df_input_raw: DataFrame containing the latest observed time in its "time" column.
+            forecasts: Dictionary of forecasts produced by `run_inference`.
         """
         last_observed_time = df_input_raw["time"].iloc[-1]
 
@@ -246,7 +359,6 @@ class DeploymentPipeline:
             )
 
             if os.path.exists(model_file_path):
-
                 df_history = pd.read_parquet(model_file_path)
                 df_combined = pd.concat([df_history, df_new_preds], ignore_index=True)
             else:
@@ -254,7 +366,8 @@ class DeploymentPipeline:
 
             df_combined.to_parquet(model_file_path, index=False)
 
-    def run(self):
+    def run(self) -> None:
+        """Execute the full deployment workflow."""
         self.setup_time_window()
         df_observed = self.fetch_and_process_data()
         self.update_history(df_observed)
