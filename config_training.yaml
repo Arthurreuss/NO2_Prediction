@@ -98,7 +98,7 @@ models:
     dropout: 0.3
   
   optimization_ranges:
-
+    trials: 20
     gru:
       hidden_size:
         type: int

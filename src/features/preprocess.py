@@ -200,6 +200,7 @@ class PreProcessingPipeline:
 
         self.scaler = scaler_cls()
         self.scaler.fit(self.train_df[numeric_cols])
+        print(numeric_cols)
 
         for split_name in ["train_df", "val_df", "test_df"]:
             df_split = getattr(self, split_name)
