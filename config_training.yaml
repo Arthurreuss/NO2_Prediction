@@ -6,34 +6,10 @@ api_requests:
     hourly_variables:
       - temperature_2m
       - relative_humidity_2m
-      - dew_point_2m
-      - apparent_temperature
       - precipitation
-      - rain
-      - snowfall
-      - snow_depth
-      - weather_code
       - pressure_msl
-      - surface_pressure
-      - cloud_cover
-      - cloud_cover_low
-      - cloud_cover_mid
-      - cloud_cover_high
-      - et0_fao_evapotranspiration
-      - vapour_pressure_deficit
       - wind_speed_10m
-      - wind_speed_100m
       - wind_direction_10m
-      - wind_direction_100m
-      - wind_gusts_10m
-      - soil_temperature_0_to_7cm
-      - soil_temperature_7_to_28cm
-      - soil_temperature_28_to_100cm
-      - soil_temperature_100_to_255cm
-      - soil_moisture_0_to_7cm
-      - soil_moisture_7_to_28cm
-      - soil_moisture_28_to_100cm
-      - soil_moisture_100_to_255cm
     timezone: Europe/Amsterdam
     temperature_unit: celsius
     wind_speed_unit: kmh
@@ -43,16 +19,8 @@ api_requests:
     hourly_variables:
       - pm10
       - pm2_5
-      - carbon_monoxide
-      - carbon_dioxide
       - nitrogen_dioxide
-      - sulphur_dioxide
       - ozone
-      - ammonia
-      - methane
-      - aerosol_optical_depth
-      - uv_index
-      - uv_index_clear_sky
     timezone: Europe/Amsterdam
 
   locations:
@@ -64,17 +32,19 @@ api_requests:
     start_date: 2016-01-02 # 2016-01-01 misses two values
     end_date: 2024-12-31
 
+  raw_dir: "data/training/raw"
+
 data:
   single:
-    train_path: "data/processed/utrecht/train.parquet"
-    val_path: "data/processed/utrecht/val.parquet"
-    test_path: "data/processed/utrecht/test.parquet"
-    scaler_path: "data/processed/utrecht/scaler.pkl"
+    train_path: "data/training/processed/utrecht/train.parquet"
+    val_path: "data/training/processed/utrecht/val.parquet"
+    test_path: "data/training/processed/utrecht/test.parquet"
+    scaler_path: "data/training/processed/utrecht/scaler.pkl"
   multi:
-    train_path: "data/processed/multi/train.parquet"
-    val_path: "data/processed/multi/val.parquet"
-    test_path: "data/processed/multi/test.parquet"
-    scaler_path: "data/processed/multi/scaler.pkl"
+    train_path: "data/training/processed/multi/train.parquet"
+    val_path: "data/training/processed/multi/val.parquet"
+    test_path: "data/training/processed/multi/test.parquet"
+    scaler_path: "data/training/processed/multi/scaler.pkl"
 
   feature_cols:
     - temperature_2m
@@ -88,6 +58,12 @@ data:
     - pm2_5
     - ozone
     - nitrogen_dioxide
+    - hour_sin
+    - hour_cos
+    - dayofweek_sin
+    - dayofweek_cos
+    - month_sin
+    - month_cos
 
   target_col: nitrogen_dioxide
 
@@ -122,7 +98,7 @@ models:
     dropout: 0.3
   
   optimization_ranges:
-
+    trials: 20
     gru:
       hidden_size:
         type: int
@@ -214,8 +190,6 @@ models:
         max: 1e-2
         log: true
 
-
-
 training:
   mlflow:
     experiment_name: Refactored_Test
@@ -227,3 +201,5 @@ training:
   grad_clip: 1.0
   patience: 5
   device: "auto"
+
+

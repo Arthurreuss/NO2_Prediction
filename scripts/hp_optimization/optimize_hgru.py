@@ -107,7 +107,7 @@ def main() -> None:
     """
 
     ctx = setup_experiment(
-        "config.yaml", experiment_name="HierHGRU_Optimization_Optuna"
+        "config_training.yaml", experiment_name="HierHGRU_Optimization_Optuna"
     )
     cfg = ctx["cfg"]
     device = ctx["device"]
@@ -117,8 +117,10 @@ def main() -> None:
         study_name="hgru_optuna_study",
     )
 
-    study.optimize(partial(objective, ctx=ctx), n_trials=20)
-
+    study.optimize(
+        partial(objective, ctx=ctx),
+        n_trials=cfg["models"]["optimization_ranges"].get("trials", 20),
+    )
     print("Best params:", study.best_params)
     print("Best NO2 RMSE:", study.best_value)
 

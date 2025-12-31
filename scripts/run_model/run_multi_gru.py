@@ -36,7 +36,7 @@ def main() -> None:
         FileNotFoundError: If the configuration file or required data files are missing.
         Exception: For any errors during model training, evaluation, or logging.
     """
-    ctx = setup_experiment("config.yaml")
+    ctx = setup_experiment("config_training.yaml")
     cfg = ctx["cfg"]
     device = ctx["device"]
     train_loader, val_loader, test_loader = get_dataloaders(cfg, multi_target=True)
@@ -95,10 +95,10 @@ def main() -> None:
         test_metrics = validate_fn(model=model, dataloader=test_loader, device=device)
         print("Test Results:", test_metrics)
 
-        mlflow.log_metric("test_rmse", test_metrics["rmse"])
-        mlflow.log_metric("test_smape", test_metrics["smape"])
+        for k, v in test_metrics.items():
+            mlflow.log_metric(f"test_{k}", float(v))
         mlflow.pytorch.log_model(model, "multi_gru_model")
-        mlflow.log_artifact("config.yaml")
+        mlflow.log_artifact("config_training.yaml")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,72 @@
+api_requests:
+  weather_api_base_url: https://archive-api.open-meteo.com/v1/archive
+  air_quality_api_base_url: https://air-quality-api.open-meteo.com/v1/air-quality
+
+  weather_params:
+    hourly_variables:
+      - temperature_2m
+      - relative_humidity_2m
+      - precipitation
+      - pressure_msl
+      - wind_speed_10m
+      - wind_direction_10m
+    timezone: Europe/Amsterdam
+    temperature_unit: celsius
+    wind_speed_unit: kmh
+    precipitation_unit: mm
+
+  air_quality_params:
+    hourly_variables:
+      - pm10
+      - pm2_5
+      - nitrogen_dioxide
+      - ozone
+    timezone: Europe/Amsterdam
+
+  locations:
+    utrecht:
+      latitude: 52.0908
+      longitude: 5.1222
+
+  raw_dir: "data/deployment/raw"
+
+data:
+  path: "deployment/data/processed/utrecht_full.csv"
+  feature_cols:
+    - temperature_2m
+    - relative_humidity_2m
+    - precipitation
+    - pressure_msl
+    - wind_speed_10m
+    - wind_dir_10m_sin
+    - wind_dir_10m_cos
+    - pm10
+    - pm2_5
+    - ozone
+    - nitrogen_dioxide
+    - hour_sin
+    - hour_cos
+    - dayofweek_sin
+    - dayofweek_cos
+    - month_sin
+    - month_cos
+  target_col: nitrogen_dioxide
+  target_cols:
+    - nitrogen_dioxide
+    - ozone
+    - pm10
+    - pm2_5
+  input_length: 168
+  forecast_horizon: 72
+
+
+deployment:
+  migration:
+    dags_uri: https://dagshub.com/Arthurreuss/NO2_Forecasting.mlflow
+    scaler_path: data/training/processed/utrecht/scaler.pkl
+  models:
+    MultiGRU: NO2_Forecasting_MultiGRU
+    HGRU: NO2_Forecasting_HGRU
+    GRU: NO2_Forecasting_GRU
+  predictions_dir: "data/deployment/predictions"
+  history_path: "data/deployment/processed/continuous_history.parquet"

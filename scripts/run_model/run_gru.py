@@ -24,7 +24,7 @@ def main() -> None:
     Returns:
         None
     """
-    ctx = setup_experiment("config.yaml")
+    ctx = setup_experiment("config_training.yaml")
     cfg, device = ctx["cfg"], ctx["device"]
     train_loader, val_loader, test_loader = get_dataloaders(cfg, multi_target=False)
     data_cfg = cfg["data"]
@@ -82,7 +82,7 @@ def main() -> None:
         print("\nTest Metrics:", test_metrics)
         mlflow.log_metrics({f"test_{k}": v for k, v in test_metrics.items()})
         mlflow.pytorch.log_model(model, "gru_model")
-        mlflow.log_artifact("config.yaml")
+        mlflow.log_artifact("config_training.yaml")
 
 
 if __name__ == "__main__":

@@ -101,7 +101,10 @@ def main() -> None:
         None
     """
 
-    ctx = setup_experiment("config.yaml", experiment_name="GRU_Optimization_Optuna")
+    ctx = setup_experiment(
+        "config_training.yaml",
+        experiment_name="GRU_Optimization_Optuna",
+    )
     cfg = ctx["cfg"]
     device = ctx["device"]
 
@@ -111,7 +114,10 @@ def main() -> None:
         pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=1),
     )
 
-    study.optimize(partial(objective, ctx=ctx), n_trials=20)
+    study.optimize(
+        partial(objective, ctx=ctx),
+        n_trials=cfg["models"]["optimization_ranges"].get("trials", 20),
+    )
 
     print("Best params:", study.best_params)
     print("Best RMSE:", study.best_value)

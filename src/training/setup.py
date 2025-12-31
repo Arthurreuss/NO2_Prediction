@@ -11,7 +11,7 @@ from src.utils.device import get_device
 
 
 def setup_experiment(
-    config_path: str = "config.yaml",
+    config_path: str = "config_training.yaml",
     experiment_name: Optional[str] = None,
     single_sensor: bool = True,
 ) -> Dict[str, Any]:
@@ -57,9 +57,15 @@ def setup_experiment(
     # Load Scaler
     scaler = joblib.load(data_paths["scaler_path"])
 
-    # Load Numeric Cols (metadata)
+    # Load Numeric Cols
     df_train = pd.read_parquet(data_paths["train_path"])
-    numeric_cols = df_train.select_dtypes(include=[float, int]).columns.tolist()
+    all_numeric_cols = df_train.select_dtypes(include=[float, int]).columns.tolist()
+
+    numeric_cols = [
+        col
+        for col in all_numeric_cols
+        if not (col.endswith("_sin") or col.endswith("_cos"))
+    ]
 
     return {
         "cfg": cfg,

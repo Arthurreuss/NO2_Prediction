@@ -17,13 +17,7 @@ def fetch_weather_data(cfg: Dict[str, Any]) -> None:
         "<location>_weather_<start_date>_to_<end_date>.csv"
 
     Args:
-        cfg: Configuration dictionary containing API settings. Expected
-            structure includes:
-            - cfg["api_requests"]["weather_api_base_url"]
-            - cfg["api_requests"]["weather_params"]
-            - cfg["api_requests"]["locations"]
-            - cfg["api_requests"]["time"]["start_date"]
-            - cfg["api_requests"]["time"]["end_date"]
+        cfg: Configuration dictionary containing API settings.
 
     Returns:
         None. The function writes CSV files to disk as a side effect.
@@ -38,7 +32,7 @@ def fetch_weather_data(cfg: Dict[str, Any]) -> None:
     time_cfg = api_cfg["time"]
 
     hourly_vars = params_cfg["hourly_variables"]
-    timezone = params_cfg.get("timezone", "UTC")
+    timezone = params_cfg.get("timezone", "Europe/Amsterdam")
     temperature_unit = params_cfg.get("temperature_unit", "celsius")
     wind_speed_unit = params_cfg.get("wind_speed_unit", "kmh")
     precipitation_unit = params_cfg.get("precipitation_unit", "mm")
@@ -46,7 +40,7 @@ def fetch_weather_data(cfg: Dict[str, Any]) -> None:
     start_date = time_cfg["start_date"]
     end_date = time_cfg["end_date"]
 
-    out_dir = Path("data/raw/weather")
+    out_dir = Path(api_cfg["raw_dir"]) / "weather"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for loc_name, loc_cfg in locations.items():
