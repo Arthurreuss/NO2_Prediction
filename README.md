@@ -1,6 +1,6 @@
 ---
 title: NO2 Forecasting
-emoji: 🇳🇱
+emoji: 🌍
 colorFrom: blue
 colorTo: green
 sdk: streamlit
