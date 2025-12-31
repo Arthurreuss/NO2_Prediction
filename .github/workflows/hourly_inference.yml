@@ -61,4 +61,4 @@ jobs:
           git remote add space https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME
           
           # Push everything (Code + New Data) to HF
-          git push --force space HEAD:main
+          git push --force space dev:main
