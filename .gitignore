@@ -3,7 +3,11 @@ pyproject.toml
 uv.log
 __pycache__/
 *DS_Store
-/data/
+data/*
+!data/deployment/
+!data/deployment/predictions/**
+!data/deployment/processed/**
+data/deployment/raw/
 test.py
 .pytest_cache/
 results/

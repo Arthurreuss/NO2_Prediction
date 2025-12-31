@@ -20,48 +20,41 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      # 1. Get your code
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Important for syncing history
           lfs: true      # Important for large model files
 
-      # 2. Install uv (The fast package manager)
       - name: Install uv
         uses: astral-sh/setup-uv@v1
 
-      # 3. Install Python 3.12
       - name: Set up Python 3.12
         run: uv python install 3.12
 
-      # 4. Install Libraries
       - name: Install Dependencies
         run: uv pip install -r requirements.txt --system
 
-      # 5. RUN YOUR MODEL (Generates new predictions/*.parquet)
       - name: Run Prediction Pipeline
-        run: uv run python src/pipeline/deployment_pipeline.py 
+        run: uv run python -m deployment.deployment_pipeline
 
-      # 6. Save Data back to GitHub (So you have a backup)
-      - name: Commit and Push Data to GitHub
+      - name: Safe Commit and Push to GitHub
         run: |
           git config --global user.name 'GitHub Action'
           git config --global user.email 'action@github.com'
           
-          # Force add data folder in case .gitignore blocks it
-          git add data/deployment/ -f
-          
-          # Only commit if data changed
-          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Hourly Forecast Update" && git push)
+          git stash
+          git pull --rebase origin dev
+          git stash pop
+          git add .
+          git diff --quiet && git diff --staged --quiet || git commit -m "Hourly Forecast Update"
+          git push origin dev
 
-      # 7. SYNC TO HUGGING FACE (The Deployment)
       - name: Push to Hugging Face Space
         env:
           HF_ACCESS_TOKEN: ${{ secrets.HF_TOKEN }}
-          # REPLACE THESE WITH YOUR DETAILS:
-          HF_USERNAME: Arthurreuss         # Your HF Username
-          HF_SPACE_NAME: NO2_Prediction   # Your Space Name
+          HF_USERNAME: Arthurreuss  
+          HF_SPACE_NAME: NO2_Prediction
         run: |
           # Add the HF Space as a remote destination
           git remote add space https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME
