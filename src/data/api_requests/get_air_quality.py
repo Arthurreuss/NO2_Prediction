@@ -32,7 +32,7 @@ def fetch_air_quality_data(cfg: Dict[str, Any]) -> None:
     time_cfg = api_cfg["time"]
 
     hourly_vars = params_cfg["hourly_variables"]
-    timezone = params_cfg.get("timezone", "UTC")
+    timezone = params_cfg.get("timezone", "Europe/Amsterdam")
 
     start_date = time_cfg["start_date"]
     end_date = time_cfg["end_date"]
