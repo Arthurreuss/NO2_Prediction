@@ -33,8 +33,9 @@ jobs:
         run: uv python install 3.12
 
       - name: Install Dependencies
-        run: uv pip install -r requirements.txt --system
-
+        run: |
+          uv venv 
+          uv pip install -r requirements.txt
       - name: Run Prediction Pipeline
         run: uv run python -m deployment.deployment_pipeline
 
