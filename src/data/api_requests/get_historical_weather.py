@@ -32,7 +32,7 @@ def fetch_weather_data(cfg: Dict[str, Any]) -> None:
     time_cfg = api_cfg["time"]
 
     hourly_vars = params_cfg["hourly_variables"]
-    timezone = params_cfg.get("timezone", "UTC")
+    timezone = params_cfg.get("timezone", "Europe/Amsterdam")
     temperature_unit = params_cfg.get("temperature_unit", "celsius")
     wind_speed_unit = params_cfg.get("wind_speed_unit", "kmh")
     precipitation_unit = params_cfg.get("precipitation_unit", "mm")

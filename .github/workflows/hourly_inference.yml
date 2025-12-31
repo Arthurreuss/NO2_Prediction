@@ -1,35 +1,70 @@
-name: Hourly Forecast
+name: Hourly NO2 Forecast
 
 on:
   schedule:
-    - cron: '5 * * * *'  # Run at 5 minutes past every hour
-  workflow_dispatch:      # Allow manual run button
+    # -------------------------------------------------------
+    # THIS IS THE SCHEDULER
+    # '15 * * * *' means: "Run at minute 15 of every hour"
+    # (e.g., 08:15, 09:15, 10:15...)
+    # -------------------------------------------------------
+    - cron: '15 * * * *'
+  
+  # This allows you to click a "Run Now" button manually for testing
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  run-inference:
+  run-and-sync:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Needed to commit the JSON file
-
+    
     steps:
+      # 1. Get your code
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Important for syncing history
+          lfs: true      # Important for large model files
 
+      # 2. Install uv (The fast package manager)
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v1
 
-      - name: Run Inference
-        # uv run automatically installs deps from pyproject.toml and runs the script
-        # We inject the secrets into the environment here
-        env:
-          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
-          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
-        run: uv run scripts/run_inference.py
+      # 3. Install Python 3.12
+      - name: Set up Python 3.12
+        run: uv python install 3.12
 
-      - name: Save Forecast
-        # Simple commit-and-push if file changed
+      # 4. Install Libraries
+      - name: Install Dependencies
+        run: uv pip install -r requirements.txt --system
+
+      # 5. RUN YOUR MODEL (Generates new predictions/*.parquet)
+      - name: Run Prediction Pipeline
+        run: uv run python src/pipeline/deployment_pipeline.py 
+
+      # 6. Save Data back to GitHub (So you have a backup)
+      - name: Commit and Push Data to GitHub
         run: |
-          git config --global user.name 'ForecastBot'
-          git config --global user.email 'bot@users.noreply.github.com'
-          git add deployment/latest_forecast.json
-          git diff --staged --quiet || (git commit -m "Update forecast [skip ci]" && git push)
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          
+          # Force add data folder in case .gitignore blocks it
+          git add data/deployment/ -f
+          
+          # Only commit if data changed
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🤖 Hourly Forecast Update" && git push)
+
+      # 7. SYNC TO HUGGING FACE (The Deployment)
+      - name: Push to Hugging Face Space
+        env:
+          HF_ACCESS_TOKEN: ${{ secrets.HF_TOKEN }}
+          # REPLACE THESE WITH YOUR DETAILS:
+          HF_USERNAME: Arthurreuss         # Your HF Username
+          HF_SPACE_NAME: NO2_Prediction   # Your Space Name
+        run: |
+          # Add the HF Space as a remote destination
+          git remote add space https://$HF_USERNAME:$HF_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME
+          
+          # Push everything (Code + New Data) to HF
+          git push --force space main

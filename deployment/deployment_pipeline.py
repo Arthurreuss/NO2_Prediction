@@ -94,20 +94,23 @@ class DeploymentPipeline:
 
         This method:
           - runs the preprocessing pipeline
-          - converts time to UTC
-          - filters out any rows beyond the current UTC hour
+          - converts time to Europe/Amsterdam
+          - filters out any rows beyond the current Europe/Amsterdam hour
 
         Returns:
-            A DataFrame containing observed data up to the current UTC hour.
+            A DataFrame containing observed data up to the current Europe/Amsterdam hour.
         """
         print("Fetching data...")
         pipeline = PreProcessingPipeline(cfg=self.cfg)
         df, _, _ = pipeline.preprocess(deployment=True)
 
-        current_hour_utc = pd.Timestamp.now(tz="UTC").floor("h")
-        df["time"] = pd.to_datetime(df["time"], utc=True)
+        current_hour_ams = pd.Timestamp.now(tz="Europe/Amsterdam").floor(
+            "h"
+        )  # + pd.Timedelta(hours=1)
+        print(f"Filtering data up to {current_hour_ams}...")
+        df["time"] = pd.to_datetime(df["time"]).dt.tz_localize("Europe/Amsterdam")
 
-        df_observed = df[df["time"] <= current_hour_utc].copy()
+        df_observed = df[df["time"] <= current_hour_ams].copy()
         return df_observed
 
     def update_history(self, df_observed: pd.DataFrame) -> None:
@@ -349,8 +352,15 @@ class DeploymentPipeline:
         for model_name, new_preds in forecasts.items():
             df_new_preds = pd.DataFrame(new_preds)
             df_new_preds["time"] = future_times
+            df_new_preds["prediction_generated_at"] = pd.Timestamp.now(
+                tz="Europe/Amsterdam"
+            ).floor("h")
 
-            cols = ["time"] + [c for c in df_new_preds.columns if c != "time"]
+            cols = ["time", "prediction_generated_at"] + [
+                c
+                for c in df_new_preds.columns
+                if c not in ["time", "prediction_generated_at"]
+            ]
             df_new_preds = df_new_preds[cols]
 
             safe_model_name = model_name.replace(" ", "_")
