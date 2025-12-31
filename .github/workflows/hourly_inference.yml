@@ -53,7 +53,7 @@ jobs:
 
       - name: Push to Hugging Face Space
         env:
-          HF_ACCESS_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_ACCESS_TOKEN: ${{ secrets.HF_ACCESS_TOKEN }}
           HF_USERNAME: Arthurreuss  
           HF_SPACE_NAME: NO2_Prediction
         run: |
