@@ -15,7 +15,6 @@ if "logged_in" not in st.session_state:
 with st.sidebar:
     st.title("Navigation")
     page = st.radio("Go to", ["Public Dashboard", "Admin Panel"])
-    st.markdown("---")
 
     if page == "Admin Panel":
         if not st.session_state["logged_in"]:
@@ -35,40 +34,11 @@ with st.sidebar:
                 st.session_state["logged_in"] = False
                 st.rerun()
 
-    st.markdown("---")
-    show_debug = st.checkbox("Show Debug Info", value=False)
-
 try:
-    df_history, preds = load_data()
+    df_history, preds, preds_all = load_data()
 except Exception as e:
     st.error(f"Error loading data: {e}")
     st.stop()
-
-if show_debug:
-    st.warning("Debug Mode Active")
-
-    with st.expander("1. Inspect History Data", expanded=True):
-        if df_history.empty:
-            st.error("History DataFrame is empty!")
-        else:
-            st.write(f"Rows: {len(df_history)}")
-            st.write(
-                "Time Range:", df_history["time"].min(), "to", df_history["time"].max()
-            )
-            st.write("First 5 rows:", df_history.head())
-            st.write("Data Types:", df_history.dtypes)
-
-    with st.expander("2. Inspect Predictions", expanded=True):
-        if not preds:
-            st.error("No prediction models found!")
-        for model_name, df_p in preds.items():
-            st.subheader(f"Model: {model_name}")
-            if df_p.empty:
-                st.write("Empty DataFrame")
-            else:
-                st.write(f"Rows: {len(df_p)}")
-                st.write("Range:", df_p["time"].min(), "to", df_p["time"].max())
-                st.write(df_p.head())
 
 
 st.markdown("## 🇳🇱 Utrecht NO₂ Air Quality Forecast")
@@ -81,6 +51,6 @@ if page == "Public Dashboard":
 
 elif page == "Admin Panel":
     if st.session_state["logged_in"]:
-        render_admin_dashboard(df_history, preds)
+        render_admin_dashboard(df_history, preds, preds_all)
     else:
         st.info("Please log in from the sidebar using 'admin' / 'admin'.")

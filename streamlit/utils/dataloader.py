@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from pyexpat import model
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 import streamlit as st
@@ -10,10 +11,6 @@ import streamlit as st
 
 @st.cache_data(ttl=300)
 def load_data():
-    """
-    Loads history and creates a 'Best Available' timeline from predictions.
-    Stitches together the latest forecast for every single timestamp.
-    """
     history_path = "data/deployment/processed/continuous_history.parquet"
     if os.path.exists(history_path):
         df_history = pd.read_parquet(history_path)
@@ -25,6 +22,7 @@ def load_data():
         df_history = pd.DataFrame(columns=["time", "nitrogen_dioxide"])
 
     preds = {}
+    preds_all = {}
     predictions_dir = "data/deployment/predictions"
     pred_files = glob.glob(os.path.join(predictions_dir, "*_predictions.parquet"))
     for f in pred_files:
@@ -51,13 +49,14 @@ def load_data():
                 )
 
             df = df.sort_values("prediction_generated_at", ascending=True)
+            preds_all[model_name] = df.sort_values("time")
             df_stitched = df.drop_duplicates(subset=["time"], keep="last")
             preds[model_name] = df_stitched.sort_values("time")
 
         except Exception as e:
             print(f"Error loading {f}: {e}")
 
-    return df_history, preds
+    return df_history, preds, preds_all
 
 
 def compute_metrics(df_history, df_pred, target_col="nitrogen_dioxide"):

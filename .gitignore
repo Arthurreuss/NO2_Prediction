@@ -5,6 +5,7 @@ __pycache__/
 *DS_Store
 data/*
 !data/deployment/
+!data/deployment/latest_run.json
 !data/deployment/predictions/**
 !data/deployment/processed/**
 data/deployment/raw/
