@@ -7,11 +7,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import psutil
+import yaml
 
 import streamlit as st
 from utils.model_evaluation import evaluate_model_performance
-
-from ...src.utils.cfg import load_config
 
 
 def render_admin_dashboard(df_history, preds, preds_all):
@@ -153,7 +152,8 @@ def render_admin_dashboard(df_history, preds, preds_all):
 
     st.caption("Real-time metrics from HF Space")
 
-    cfg = load_config("config_deployment.yaml")
+    with open("config_deployment.yaml") as f:
+        cfg = yaml.safe_load(f)
 
     file_path = cfg["system_usage_path"]
     if os.path.exists(file_path):
