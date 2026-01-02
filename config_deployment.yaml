@@ -70,3 +70,4 @@ deployment:
     GRU: NO2_Forecasting_GRU
   predictions_dir: "data/deployment/predictions"
   history_path: "data/deployment/processed/continuous_history.parquet"
+  system_usage_path: "data/deployment/latest_run.json"

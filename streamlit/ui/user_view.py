@@ -6,7 +6,8 @@ from utils.styling import get_aqi_category, get_aqi_thresholds
 
 
 def render_user_dashboard(df_history, preds):
-    col_sel, col_empty = st.columns([1, 3])
+    col_sel, col_models = st.columns([1, 2])
+
     with col_sel:
         pollutant_map = {
             "Nitrogen Dioxide (NO₂)": "nitrogen_dioxide",
@@ -16,6 +17,15 @@ def render_user_dashboard(df_history, preds):
         }
         selected_label = st.selectbox("Select Pollutant", list(pollutant_map.keys()))
         target_col = pollutant_map[selected_label]
+
+    available_models = list(preds.keys())
+
+    with col_models:
+        selected_models = st.multiselect(
+            "Select Forecasting Models",
+            options=available_models,
+            default=available_models,
+        )
 
     st.markdown(
         f"Monitor and forecast **{selected_label}** levels to plan your outdoor activities."
@@ -75,6 +85,9 @@ def render_user_dashboard(df_history, preds):
     valid_models_found = 0
 
     for i, (model_name, df_p) in enumerate(preds.items()):
+        if model_name not in selected_models:
+            continue
+
         if target_col not in df_p.columns:
             continue
 
@@ -99,8 +112,10 @@ def render_user_dashboard(df_history, preds):
                 )
                 valid_models_found += 1
 
-    if valid_models_found == 0:
-        st.caption(f"No models currently available for {selected_label}.")
+    if valid_models_found == 0 and len(selected_models) > 0:
+        st.caption(f"No valid data found for the selected models.")
+    elif len(selected_models) == 0:
+        st.caption("Select at least one model to see the forecast.")
 
     current_time_ms = current_time.timestamp() * 1000
 
@@ -167,7 +182,7 @@ def render_user_dashboard(df_history, preds):
     minimum_view = th[0] * 1.2
     final_top_limit = max(calculated_top, minimum_view)
 
-    zoom_start = current_time  # - pd.Timedelta(hours=24)
+    zoom_start = current_time
     zoom_end = current_time + pd.Timedelta(hours=48)
 
     fig.update_layout(
