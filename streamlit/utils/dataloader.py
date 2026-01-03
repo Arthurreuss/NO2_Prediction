@@ -7,7 +7,30 @@ import streamlit as st
 
 
 @st.cache_data(ttl=300)
-def load_data(history_path, predictions_dir):
+def load_data(
+    history_path: str, predictions_dir: str
+) -> tuple[pd.DataFrame, dict, dict]:
+    """Loads and preprocesses historical and prediction data from disk.
+
+    Reads the history Parquet file and converts timestamps to the 'Europe/Amsterdam'
+    timezone. Iterates through prediction files in the specified directory,
+    processes timestamps, validates batch sizes, and organizes them into raw
+    and stitched (latest prediction per timestamp) dictionaries.
+
+    Args:
+        history_path: File path to the historical data Parquet file.
+        predictions_dir: Directory path containing prediction Parquet files
+            (matching the pattern *_predictions.parquet).
+
+    Returns:
+        A tuple containing three elements:
+            1. The historical data DataFrame.
+            2. A dictionary mapping model names to stitched (most recent) prediction DataFrames.
+            3. A dictionary mapping model names to all raw prediction DataFrames.
+
+    Raises:
+        FileNotFoundError: If the history_path does not exist.
+    """
     if os.path.exists(history_path):
         df_history = pd.read_parquet(history_path)
         df_history["time"] = df_history["time"].dt.tz_convert("Europe/Amsterdam")
@@ -27,25 +50,6 @@ def load_data(history_path, predictions_dir):
             for col in ["time", "prediction_generated_at"]:
                 if col in df.columns:
                     df[col] = df[col].dt.tz_convert("Europe/Amsterdam")
-
-            # temporary delete later
-            if "prediction_generated_at" in df.columns:
-                mask_30_12 = (df["prediction_generated_at"].dt.month == 12) & (
-                    df["prediction_generated_at"].dt.day == 30
-                )
-                df = df[~mask_30_12]
-                mask_31_12_04 = (
-                    (df["prediction_generated_at"].dt.month == 12)
-                    & (df["prediction_generated_at"].dt.day == 31)
-                    & (df["prediction_generated_at"].dt.hour < 7)
-                )
-                df = df[~mask_31_12_04]
-                mask_0_0 = df["prediction_generated_at"] == df["time"]
-                df = df[~mask_0_0]
-                df = df.drop_duplicates(
-                    subset=["prediction_generated_at", "time"], keep="first"
-                )
-            ######
 
             if not df.empty:
                 latest_gen_time = df["prediction_generated_at"].max()

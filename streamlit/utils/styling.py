@@ -1,7 +1,21 @@
-def get_aqi_category(value, pollutant="nitrogen_dioxide"):
-    """
-    Returns (Category, Color, Description) based on EEA (European Environment Agency) standards.
-    Thresholds are approximate hourly/daily visual guides.
+def get_aqi_category(
+    value: float | int, pollutant: str = "nitrogen_dioxide"
+) -> tuple[str, str, str]:
+    """Determines the Air Quality Index (AQI) category, color code, and description.
+
+    Based on European Environment Agency (EEA) standards. Thresholds are approximate
+    hourly/daily visual guides used for dashboard display.
+
+    Args:
+        value: The pollutant concentration value (e.g., µg/m³).
+        pollutant: The specific pollutant identifier (e.g., "no2", "pm10").
+            Defaults to "nitrogen_dioxide".
+
+    Returns:
+        A tuple containing three strings:
+            1. The AQI Category (e.g., "Good", "Poor").
+            2. The Hex color code associated with the category.
+            3. A short text description/advisory.
     """
     p = pollutant.lower()
 
@@ -52,8 +66,18 @@ def get_aqi_category(value, pollutant="nitrogen_dioxide"):
     return "Unknown", "#808080", "No standard available"
 
 
-def get_aqi_thresholds(pollutant):
-    """Returns the boundary values for background coloring"""
+def get_aqi_thresholds(pollutant: str) -> list[int]:
+    """Retrieves the numeric boundary values for AQI categories.
+
+    Used to draw background color bands on charts.
+
+    Args:
+        pollutant: The specific pollutant identifier.
+
+    Returns:
+        A list of four integers representing the upper bounds for "Good", "Fair",
+        "Moderate", and "Poor" categories respectively.
+    """
     p = pollutant.lower()
     if p in ["no2", "nitrogen_dioxide"]:
         return [50, 100, 200, 400]

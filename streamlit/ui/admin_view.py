@@ -1,7 +1,5 @@
 import json
 import os
-import smtplib
-from email.message import EmailMessage
 
 import pandas as pd
 import plotly.express as px
@@ -9,120 +7,19 @@ import plotly.graph_objects as go
 import psutil
 
 import streamlit as st
+from utils.alerts import check_and_alert_health
 from utils.model_evaluation import get_horizon_metrics, get_performance_over_time
 
 
-def send_alert_email(subject, body):
-    user = os.environ.get("EMAIL_USER")
-    password = os.environ.get("EMAIL_PASSWORD")
-    to_email = os.environ.get("EMAIL_TO")
-    smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", 465))
+def safe_display_df(df: pd.DataFrame, limit: int = 500) -> None:
+    """Converts datetime columns to string and displays dataframe in Streamlit.
 
-    if not user or not password or not to_email:
-        print("Email credentials missing. Skipping alert email.")
-        return
+    Prevents PyArrow/Streamlit crashes associated with specific timezones (e.g.,
+    'Europe/Amsterdam') by converting time-based columns to strings before rendering.
 
-    msg = EmailMessage()
-    msg.set_content(body)
-    msg["Subject"] = subject
-    msg["From"] = user
-    msg["To"] = to_email
-
-    try:
-        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
-            server.login(user, password)
-            server.send_message(msg)
-        print("Alert email sent successfully.")
-    except Exception as e:
-        print(f"Failed to send alert email: {e}")
-
-
-def check_and_alert_health(df_history, sys_stats_path, alert_file):
-    issues = []
-
-    mem = psutil.virtual_memory()
-    if mem.percent > 90:
-        issues.append(f"CRITICAL: System RAM is at {mem.percent}%")
-
-    disk = psutil.disk_usage(".")
-    free_gb = disk.free / (1024**3)
-    if free_gb < 0.5:
-        issues.append(f"CRITICAL: Low Disk Space ({free_gb:.2f} GB remaining)")
-
-    if df_history is None or df_history.empty:
-        issues.append("CRITICAL: History DataFrame is empty/missing")
-
-    if os.path.exists(sys_stats_path):
-        try:
-            with open(sys_stats_path, "r") as f:
-                stats = json.load(f)
-
-            last_run_str = stats.get("last_run")
-            if last_run_str:
-                last_run = pd.to_datetime(last_run_str)
-                if last_run.tz is None:
-                    last_run = last_run.tz_localize("UTC")
-
-                now = pd.Timestamp.now(tz="UTC")
-                diff_hours = (now - last_run).total_seconds() / 3600
-
-                if diff_hours > 3:
-                    issues.append(
-                        f"WARNING: Pipeline Data Stale. Last run was {diff_hours:.1f} hours ago."
-                    )
-        except Exception as e:
-            issues.append(f"ERROR: Could not parse pipeline stats: {e}")
-
-    if issues:
-        should_send = True
-
-        if os.path.exists(alert_file):
-            try:
-                with open(alert_file, "r") as f:
-                    cooldown_data = json.load(f)
-
-                last_sent_str = cooldown_data.get("last_sent")
-                if last_sent_str:
-                    last_sent = pd.to_datetime(last_sent_str)
-                    now = pd.Timestamp.now()
-                    seconds_since_last = (now - last_sent).total_seconds()
-
-                    if seconds_since_last < 3600:  # 3600 seconds = 1 hour
-                        should_send = False
-                        print(
-                            f"Skipping email alert. Last sent {int(seconds_since_last/60)} min ago."
-                        )
-            except Exception:
-                pass
-
-        if should_send:
-            subject = f"Admin Dashboard Alert: {len(issues)} Issues Detected"
-            body = (
-                "The following issues were detected on your dashboard:\n\n"
-                + "\n".join(issues)
-            )
-
-            send_alert_email(subject, body)
-
-            with open(alert_file, "w") as f:
-                json.dump({"last_sent": str(pd.Timestamp.now())}, f)
-
-            st.toast(f"Alert sent via Email ({len(issues)} issues).")
-
-        with st.expander("Active System Alerts", expanded=True):
-            for issue in issues:
-                st.error(issue)
-            if not should_send:
-                st.caption(
-                    "ℹ️ Email notification suppressed (Cooldown active: Max 1 email/hour)."
-                )
-
-
-def safe_display_df(df, limit=500):
-    """
-    Converts datetime columns to string to prevent PyArrow/Streamlit crashes
-    with 'Europe/Amsterdam' timezones.
+    Args:
+        df: The DataFrame to display.
+        limit: Maximum number of rows to display. Defaults to 500.
     """
     if df is None or df.empty:
         st.write("Empty DataFrame")
@@ -140,8 +37,22 @@ def safe_display_df(df, limit=500):
     st.dataframe(display_df)
 
 
-def plot_horizon_metric(data_dict, metric_col, title, y_label, show_ci=False):
-    """Helper for Horizon Plots (Aggregated Step View)"""
+def plot_horizon_metric(
+    data_dict: dict, metric_col: str, title: str, y_label: str, show_ci: bool = False
+) -> go.Figure:
+    """Generates a Plotly line chart for horizon metrics across different models.
+
+    Args:
+        data_dict: Dictionary mapping model names to their performance DataFrames.
+        metric_col: The column name in the DataFrames to plot (e.g., 'RMSE_mean').
+        title: The title of the plot.
+        y_label: The label for the Y-axis.
+        show_ci: Whether to show the confidence interval shading (RMSE only).
+            Defaults to False.
+
+    Returns:
+        go.Figure: A Plotly graph object containing the aggregated step view.
+    """
     fig = go.Figure()
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
 
@@ -187,7 +98,12 @@ def plot_horizon_metric(data_dict, metric_col, title, y_label, show_ci=False):
     return fig
 
 
-def show_system_and_pipeline_stats(sys_stats_path):
+def show_system_and_pipeline_stats(sys_stats_path: str) -> None:
+    """Displays system resource usage and pipeline statistics in a Streamlit expander.
+
+    Args:
+        sys_stats_path: Path to the JSON file containing pipeline statistics.
+    """
     with st.expander("System & Pipeline Stats"):
         process = psutil.Process(os.getpid())
         mem_info = process.memory_info()
@@ -227,7 +143,20 @@ def show_system_and_pipeline_stats(sys_stats_path):
             st.warning("No external pipeline stats found.")
 
 
-def render_admin_dashboard(df_history, preds, preds_all, cfg):
+def render_admin_dashboard(
+    df_history: pd.DataFrame, preds: dict, preds_all: dict, cfg: dict
+) -> None:
+    """Renders the complete Admin Dashboard Streamlit interface.
+
+    Orchestrates health checks, system stats display, pollutant performance analysis,
+    and data inspection tabs.
+
+    Args:
+        df_history: DataFrame containing historical air quality data.
+        preds: Dictionary of DataFrames containing recent model predictions.
+        preds_all: Dictionary of DataFrames containing all model predictions (raw).
+        cfg: Configuration dictionary containing deployment paths and settings.
+    """
     sys_stats_path = cfg["deployment"]["system_usage_path"]
     alert_file_path = cfg["deployment"]["alert_file"]
     st.title("Admin Dashboard")
