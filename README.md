@@ -129,7 +129,7 @@ streamlit run streamlit/app.py
 
 * **Model Migration:**
 Run the migration script to promote your locally trained models to the remote DagsHub registry.
-> **Note:** The script will only migrate models that are **registered** in your local MLflow and tagged with the **`production`** alias.
+> **Note:** The script will only migrate models that are **registered** in your local MLflow and tagged with the **`@production`** alias.
 ```bash
 uv run python -m deployment.migration.migrate
 ````
@@ -142,6 +142,6 @@ mlflow ui
 
 
 > **Note on Deployment:**
-> A **GitHub Actions** workflow triggers every hour. It runs the inference pipeline and pushes the updated results to **Hugging Face**, where the hosted Streamlit application displays the live results.
+> A **GitHub Actions** workflow triggers every hour. It runs the inference pipeline using only models marked with the **`@production`** alias in the DagsHub registry and pushes the updated results to **Hugging Face**, where the hosted Streamlit application displays the live results.
 >
 > You can find the specific workflow configuration under **`.github/workflows`** if you are interested in how the automated inference and push to Hugging Face is implemented.
