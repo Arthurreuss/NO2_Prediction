@@ -1,5 +1,8 @@
 import json
 import os
+import smtplib
+from datetime import datetime
+from email.message import EmailMessage
 
 import pandas as pd
 import plotly.express as px
@@ -8,6 +11,88 @@ import psutil
 
 import streamlit as st
 from utils.model_evaluation import get_horizon_metrics, get_performance_over_time
+
+
+def send_alert_email(subject, body):
+    user = os.environ.get("EMAIL_USER")
+    password = os.environ.get("EMAIL_PASSWORD")
+    to_email = os.environ.get("EMAIL_TO")
+    smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", 465))
+
+    if not user or not password or not to_email:
+        print("⚠️ Email credentials missing. Skipping alert email.")
+        return
+
+    msg = EmailMessage()
+    msg.set_content(body)
+    msg["Subject"] = subject
+    msg["From"] = user
+    msg["To"] = to_email
+
+    try:
+        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+            server.login(user, password)
+            server.send_message(msg)
+        print("Alert email sent successfully.")
+    except Exception as e:
+        print(f"Failed to send alert email: {e}")
+
+
+def check_and_alert_health(df_history, sys_stats_path):
+    """
+    Checks for system anomalies (High RAM, Low Disk, Stale Data)
+    and sends an email if 'something is off'.
+    """
+    issues = []
+
+    mem = psutil.virtual_memory()
+    if mem.percent > 90:
+        issues.append(f"CRITICAL: System RAM is at {mem.percent}%")
+
+    disk = psutil.disk_usage(".")
+    free_gb = disk.free / (1024**3)
+    if free_gb < 0.5:
+        issues.append(f"CRITICAL: Low Disk Space ({free_gb:.2f} GB remaining)")
+
+    if df_history is None or df_history.empty:
+        issues.append("CRITICAL: History DataFrame is empty/missing")
+
+    if os.path.exists(sys_stats_path):
+        try:
+            with open(sys_stats_path, "r") as f:
+                stats = json.load(f)
+
+            last_run_str = stats.get("last_run")
+            if last_run_str:
+                last_run = pd.to_datetime(last_run_str)
+
+                now = pd.Timestamp.now(tz="Europe/Amsterdam")
+                diff_hours = (now - last_run).total_seconds() / 3600
+
+                if diff_hours > 3:
+                    issues.append(
+                        f"WARNING: Pipeline Data Stale. Last run was {diff_hours:.1f} hours ago."
+                    )
+        except Exception as e:
+            issues.append(f"ERROR: Could not parse pipeline stats: {e}")
+
+    if issues:
+        if "alert_sent_session" not in st.session_state:
+            subject = f"Admin Dashboard Alert: {len(issues)} Issues Detected"
+            body = (
+                "The following issues were detected on your dashboard:\n\n"
+                + "\n".join(issues)
+            )
+
+            send_alert_email(subject, body)
+
+            st.session_state["alert_sent_session"] = True
+            st.toast(f"Alert sent: {len(issues)} issues detected.", icon="⚠️")
+
+        with st.expander("Active System Alerts", expanded=True):
+            for issue in issues:
+                st.error(issue)
 
 
 def safe_display_df(df, limit=500):
@@ -19,14 +104,11 @@ def safe_display_df(df, limit=500):
         st.write("Empty DataFrame")
         return
 
-    # Create a copy to not modify the original data used for plotting
     display_df = df.head(limit).copy()
 
-    # Convert all datetime columns (including index if datetime) to string
     for col in display_df.select_dtypes(include=["datetime", "datetimetz"]).columns:
         display_df[col] = display_df[col].astype(str)
 
-    # Also check specific column names just in case dtype detection missed it
     for col in ["time", "prediction_generated_at"]:
         if col in display_df.columns:
             display_df[col] = display_df[col].astype(str)
@@ -44,7 +126,6 @@ def plot_horizon_metric(data_dict, metric_col, title, y_label, show_ci=False):
             continue
         color = colors[i % len(colors)]
 
-        # Robust sort
         df = df.sort_values("step")
 
         fig.add_trace(
@@ -124,6 +205,9 @@ def show_system_and_pipeline_stats(sys_stats_path):
 
 def render_admin_dashboard(df_history, preds, preds_all, sys_stats_path):
     st.title("Admin Dashboard")
+
+    check_and_alert_health(df_history, sys_stats_path)
+
     show_system_and_pipeline_stats(sys_stats_path)
 
     pollutants = {
@@ -150,9 +234,10 @@ def render_admin_dashboard(df_history, preds, preds_all, sys_stats_path):
         df_perf_history = get_performance_over_time(
             df_history, preds_all, pollutant=target_col
         )
-        df_perf_history["prediction_generated_at"] = df_perf_history[
-            "prediction_generated_at"
-        ].dt.tz_convert("Europe/Amsterdam")
+        if not df_perf_history.empty:
+            df_perf_history["prediction_generated_at"] = df_perf_history[
+                "prediction_generated_at"
+            ].dt.tz_convert("Europe/Amsterdam")
 
         st.subheader(f"Global Horizon Analysis ({pol_label})")
         st.caption(

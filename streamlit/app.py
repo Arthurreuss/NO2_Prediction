@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 from streamlit_autorefresh import st_autorefresh
 from ui.admin_view import render_admin_dashboard
 from ui.user_view import render_user_dashboard
@@ -9,6 +10,7 @@ import streamlit as st
 from utils.dataloader import load_data
 
 project_root = Path(__file__).parent.parent
+load_dotenv()
 
 with open(str(project_root / "configs/config_deployment.yaml")) as f:
     cfg = yaml.safe_load(f)
