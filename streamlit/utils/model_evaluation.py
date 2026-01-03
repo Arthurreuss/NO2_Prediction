@@ -77,6 +77,8 @@ def get_performance_over_time(df_history, preds_all, pollutant="nitrogen_dioxide
     df_history["time"] = pd.to_datetime(df_history["time"], utc=True)
 
     for model_name, df_pred in preds_all.items():
+        if pollutant != "nitrogen_dioxide" and model_name == "GRU":
+            continue
 
         df_pred = df_pred.copy()
         df_pred["time"] = pd.to_datetime(df_pred["time"], utc=True)
