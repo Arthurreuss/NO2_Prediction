@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 from streamlit_autorefresh import st_autorefresh
 from ui.admin_view import render_admin_dashboard
 from ui.user_view import render_user_dashboard
@@ -9,23 +10,28 @@ import streamlit as st
 from utils.dataloader import load_data
 
 project_root = Path(__file__).parent.parent
+load_dotenv()
+
+with open(str(project_root / "configs/config_deployment.yaml")) as f:
+    cfg: dict = yaml.safe_load(f)
 
 st.set_page_config(page_title="Utrecht NO2 Forecasting", layout="wide")
 
-count = st_autorefresh(interval=300000, key="data_refresh")
+# Automatically refresh the page every 5 minutes (300,000 milliseconds)
+count: int = st_autorefresh(interval=300000, key="data_refresh")
 
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 
 with st.sidebar:
     st.title("Navigation")
-    page = st.radio("Go to", ["Public Dashboard", "Admin Panel"])
+    page: str = st.radio("Go to", ["Public Dashboard", "Admin Panel"])
 
     if page == "Admin Panel":
         if not st.session_state["logged_in"]:
             st.subheader("Admin Login")
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
+            username: str = st.text_input("Username")
+            password: str = st.text_input("Password", type="password")
 
             if st.button("Login"):
                 if username == "admin" and password == "admin":
@@ -40,8 +46,6 @@ with st.sidebar:
                 st.rerun()
 
 try:
-    with open(str(project_root / "config_deployment.yaml")) as f:
-        cfg = yaml.safe_load(f)
     df_history, preds, preds_all = load_data(
         cfg["deployment"]["history_path"], cfg["deployment"]["predictions_dir"]
     )
@@ -60,8 +64,6 @@ if page == "Public Dashboard":
 
 elif page == "Admin Panel":
     if st.session_state["logged_in"]:
-        render_admin_dashboard(
-            df_history, preds, preds_all, cfg["deployment"]["system_usage_path"]
-        )
+        render_admin_dashboard(df_history, preds, preds_all, cfg)
     else:
         st.info("Please log in from the sidebar using 'admin' / 'admin'.")

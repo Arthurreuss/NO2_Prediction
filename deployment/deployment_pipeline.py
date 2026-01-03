@@ -52,7 +52,7 @@ class DeploymentPipeline:
       - persists predictions to parquet files
     """
 
-    def __init__(self, config_path: str = "config_deployment.yaml") -> None:
+    def __init__(self, config_path: str = "configs/config_deployment.yaml") -> None:
         """Initialize the deployment pipeline from a configuration file.
 
         Args:

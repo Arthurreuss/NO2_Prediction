@@ -1,23 +1,41 @@
 import glob
 import os
 
-import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 import streamlit as st
 
 
 @st.cache_data(ttl=300)
-def load_data(history_path, predictions_dir):
+def load_data(
+    history_path: str, predictions_dir: str
+) -> tuple[pd.DataFrame, dict, dict]:
+    """Loads and preprocesses historical and prediction data from disk.
+
+    Reads the history Parquet file and converts timestamps to the 'Europe/Amsterdam'
+    timezone. Iterates through prediction files in the specified directory,
+    processes timestamps, validates batch sizes, and organizes them into raw
+    and stitched (latest prediction per timestamp) dictionaries.
+
+    Args:
+        history_path: File path to the historical data Parquet file.
+        predictions_dir: Directory path containing prediction Parquet files
+            (matching the pattern *_predictions.parquet).
+
+    Returns:
+        A tuple containing three elements:
+            1. The historical data DataFrame.
+            2. A dictionary mapping model names to stitched (most recent) prediction DataFrames.
+            3. A dictionary mapping model names to all raw prediction DataFrames.
+
+    Raises:
+        FileNotFoundError: If the history_path does not exist.
+    """
     if os.path.exists(history_path):
         df_history = pd.read_parquet(history_path)
-        if df_history["time"].dt.tz is None:
-            df_history["time"] = df_history["time"].dt.tz_localize("Europe/Amsterdam")
-        else:
-            df_history["time"] = df_history["time"].dt.tz_convert("Europe/Amsterdam")
+        df_history["time"] = df_history["time"].dt.tz_convert("Europe/Amsterdam")
     else:
-        df_history = pd.DataFrame(columns=["time", "nitrogen_dioxide"])
+        raise FileNotFoundError(f"History file not found: {history_path}")
 
     preds = {}
     preds_all = {}
@@ -31,22 +49,21 @@ def load_data(history_path, predictions_dir):
 
             for col in ["time", "prediction_generated_at"]:
                 if col in df.columns:
-                    if df[col].dt.tz is None:
-                        df[col] = df[col].dt.tz_localize("Europe/Amsterdam")
-                    else:
-                        df[col] = df[col].dt.tz_convert("Europe/Amsterdam")
+                    df[col] = df[col].dt.tz_convert("Europe/Amsterdam")
 
-            latest_gen_time = df["prediction_generated_at"].max()
+            if not df.empty:
+                latest_gen_time = df["prediction_generated_at"].max()
+                latest_batch = df[df["prediction_generated_at"] == latest_gen_time]
+                if len(latest_batch) != 72:
+                    print(
+                        f"ALERT: Latest forecast for {model_name} is incorrect! Expected 72, got {len(latest_batch)}."
+                    )
 
-            latest_batch = df[df["prediction_generated_at"] == latest_gen_time]
+            df = df.sort_values(
+                by=["prediction_generated_at", "time"], ascending=[True, True]
+            )
 
-            if len(latest_batch) < 72:
-                print(
-                    f"ALERT: Latest forecast for {model_name} is incomplete! Expected 72, got {len(latest_batch)}."
-                )
-
-            df = df.sort_values("prediction_generated_at", ascending=True)
-            preds_all[model_name] = df.sort_values("time")
+            preds_all[model_name] = df.copy()
             df_stitched = df.drop_duplicates(subset=["time"], keep="last")
             preds[model_name] = df_stitched.sort_values("time")
 
@@ -54,24 +71,3 @@ def load_data(history_path, predictions_dir):
             print(f"Error loading {f}: {e}")
 
     return df_history, preds, preds_all
-
-
-def compute_metrics(df_history, df_pred, target_col="nitrogen_dioxide"):
-    merged = pd.merge(
-        df_history[["time", target_col]],
-        df_pred[["time", target_col]],
-        on="time",
-        how="inner",
-        suffixes=("_actual", "_pred"),
-    )
-
-    if len(merged) == 0:
-        return {"MAE": 0.0, "RMSE": 0.0, "Count": 0}
-
-    y_true = merged[f"{target_col}_actual"]
-    y_pred = merged[f"{target_col}_pred"]
-
-    mae = mean_absolute_error(y_true, y_pred)
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-
-    return {"MAE": mae, "RMSE": rmse, "Count": len(merged)}

@@ -5,7 +5,23 @@ import streamlit as st
 from utils.styling import get_aqi_category, get_aqi_thresholds
 
 
-def render_user_dashboard(df_history, preds):
+def render_user_dashboard(
+    df_history: pd.DataFrame, preds: dict[str, pd.DataFrame]
+) -> None:
+    """Renders the main user dashboard for air quality monitoring and forecasting.
+
+    Displays an interactive interface allowing users to select specific pollutants
+    and forecasting models. Visualizes historical data alongside model predictions
+    using Plotly, with background color bands representing EEA Air Quality Index
+    (AQI) thresholds. Also displays a 'Current Status' card based on the most
+    recent historical observation.
+
+    Args:
+        df_history: A DataFrame containing historical air quality data with
+            timestamp and pollutant columns.
+        preds: A dictionary mapping model names (e.g., 'XGBoost', 'LSTM') to
+            DataFrames containing their respective prediction data.
+    """
     col_sel, col_models = st.columns([1, 2])
 
     with col_sel:
@@ -199,7 +215,7 @@ def render_user_dashboard(df_history, preds):
         dragmode="pan",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.info(
         f"ℹ️ Guidelines based on European Environment Agency (EEA) standards for {selected_label}."
     )

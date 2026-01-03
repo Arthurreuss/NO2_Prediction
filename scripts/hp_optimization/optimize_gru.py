@@ -102,8 +102,8 @@ def main() -> None:
     """
 
     ctx = setup_experiment(
-        "config_training.yaml",
-        experiment_name="GRU_Optimization_Optuna",
+        "configs/config_training.yaml",
+        experiment_name="GRU_Optimization_Optuna_25",
     )
     cfg = ctx["cfg"]
     device = ctx["device"]

@@ -1,20 +1,58 @@
 import json
 import os
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import psutil
-import yaml
 
 import streamlit as st
+from utils.alerts import check_and_alert_health
 from utils.model_evaluation import get_horizon_metrics, get_performance_over_time
 
 
-def plot_horizon_metric(data_dict, metric_col, title, y_label, show_ci=False):
-    """Helper for Horizon Plots (Aggregated Step View)"""
+def safe_display_df(df: pd.DataFrame, limit: int = 500) -> None:
+    """Converts datetime columns to string and displays dataframe in Streamlit.
+
+    Prevents PyArrow/Streamlit crashes associated with specific timezones (e.g.,
+    'Europe/Amsterdam') by converting time-based columns to strings before rendering.
+
+    Args:
+        df: The DataFrame to display.
+        limit: Maximum number of rows to display. Defaults to 500.
+    """
+    if df is None or df.empty:
+        st.write("Empty DataFrame")
+        return
+
+    display_df = df.head(limit).copy()
+
+    for col in display_df.select_dtypes(include=["datetime", "datetimetz"]).columns:
+        display_df[col] = display_df[col].astype(str)
+
+    for col in ["time", "prediction_generated_at"]:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].astype(str)
+
+    st.dataframe(display_df)
+
+
+def plot_horizon_metric(
+    data_dict: dict, metric_col: str, title: str, y_label: str, show_ci: bool = False
+) -> go.Figure:
+    """Generates a Plotly line chart for horizon metrics across different models.
+
+    Args:
+        data_dict: Dictionary mapping model names to their performance DataFrames.
+        metric_col: The column name in the DataFrames to plot (e.g., 'RMSE_mean').
+        title: The title of the plot.
+        y_label: The label for the Y-axis.
+        show_ci: Whether to show the confidence interval shading (RMSE only).
+            Defaults to False.
+
+    Returns:
+        go.Figure: A Plotly graph object containing the aggregated step view.
+    """
     fig = go.Figure()
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
 
@@ -23,7 +61,6 @@ def plot_horizon_metric(data_dict, metric_col, title, y_label, show_ci=False):
             continue
         color = colors[i % len(colors)]
 
-        # Robust sort
         df = df.sort_values("step")
 
         fig.add_trace(
@@ -61,152 +98,189 @@ def plot_horizon_metric(data_dict, metric_col, title, y_label, show_ci=False):
     return fig
 
 
-def render_admin_dashboard(df_history, preds, preds_all, file_path):
-    st.title("Admin Dashboard")
+def show_system_and_pipeline_stats(sys_stats_path: str) -> None:
+    """Displays system resource usage and pipeline statistics in a Streamlit expander.
 
-    # --- 1. PRE-CALCULATE DATA ---
-    agg_metrics = {}
-    recent_metrics = {}
-    recent_run_time_str = "N/A"
-
-    # A. Horizon Analysis (Step-by-Step)
-    for model_name, df_all_predictions in preds_all.items():
-        # Global Aggregate
-        stats_all, _ = get_horizon_metrics(df_history, df_all_predictions)
-        agg_metrics[model_name] = stats_all
-
-        # Single Recent Run (Manual Split)
-        # --- FIX: Manually split DataFrame to find the latest valid run ---
-        if "prediction_generated_at" in df_all_predictions.columns:
-            unique_gen_times = sorted(
-                df_all_predictions["prediction_generated_at"].unique(), reverse=True
-            )
-
-            best_overlap_run = None
-            # Search backwards for a run with enough validation data
-            for gen_time in unique_gen_times:
-                single_run_df = df_all_predictions[
-                    df_all_predictions["prediction_generated_at"] == gen_time
-                ].copy()
-                run_stats, _ = get_horizon_metrics(df_history, single_run_df)
-
-                if (
-                    run_stats is not None and run_stats["Count"].sum() >= 24
-                ):  # Require at least 24h overlap
-                    best_overlap_run = run_stats
-                    ts = pd.to_datetime(gen_time)
-                    recent_run_time_str = ts.strftime("%Y-%m-%d %H:%M UTC")
-                    break
-
-            recent_metrics[model_name] = best_overlap_run
-
-    # B. Performance Over Time (New Feature)
-    df_perf_history = get_performance_over_time(df_history, preds_all)
-
-    # --- 2. GLOBAL HORIZON PLOTS ---
-    st.subheader("🌍 Global Horizon Analysis (Aggregated)")
-    st.caption(
-        "How does error increase as we forecast further into the future? (Averaged over all history)"
-    )
-
-    tab1, tab2 = st.tabs(["RMSE (by Step)", "SMAPE (by Step)"])
-    with tab1:
-        st.plotly_chart(
-            plot_horizon_metric(
-                agg_metrics, "RMSE_mean", "Avg RMSE per Horizon Step", "RMSE"
-            ),
-            use_container_width=True,
-        )
-    with tab2:
-        st.plotly_chart(
-            plot_horizon_metric(
-                agg_metrics, "SMAPE_mean", "Avg SMAPE per Horizon Step", "SMAPE (%)"
-            ),
-            use_container_width=True,
-        )
-
-    st.markdown("---")
-
-    # --- 3. PERFORMANCE EVOLUTION PLOTS (NEW) ---
-    st.subheader("📈 Model Performance Evolution")
-    st.caption(
-        "Average error per forecast run (72h) over time. Only showing completed runs (>3 days old)."
-    )
-
-    if not df_perf_history.empty:
-        tab_ev1, tab_ev2 = st.tabs(["RMSE History", "SMAPE History"])
-
-        with tab_ev1:
-            fig_ev_rmse = px.line(
-                df_perf_history,
-                x="prediction_generated_at",
-                y="RMSE",
-                color="Model",
-                title="RMSE per Forecast Run (Avg over 72h)",
-                markers=True,
-            )
-            fig_ev_rmse.update_layout(
-                xaxis_title="Run Time", yaxis_title="Average RMSE"
-            )
-            st.plotly_chart(fig_ev_rmse, use_container_width=True)
-
-        with tab_ev2:
-            fig_ev_smape = px.line(
-                df_perf_history,
-                x="prediction_generated_at",
-                y="SMAPE",
-                color="Model",
-                title="SMAPE per Forecast Run (Avg over 72h)",
-                markers=True,
-            )
-            fig_ev_smape.update_layout(
-                xaxis_title="Run Time", yaxis_title="Average SMAPE (%)"
-            )
-            st.plotly_chart(fig_ev_smape, use_container_width=True)
-    else:
-        st.info(
-            "Not enough historical data yet to show performance evolution (need runs older than 72h)."
-        )
-
-    st.markdown("---")
-
-    # --- 4. RECENT RUN ANALYSIS ---
-    st.subheader("⏱️ Recent Run Analysis")
-    st.caption(
-        f"Performance of the most recent validatable forecast run (Run Time: {recent_run_time_str})"
-    )
-
-    tab3, tab4 = st.tabs(["RMSE (Last Run)", "SMAPE (Last Run)"])
-    with tab3:
-        if any(v is not None for v in recent_metrics.values()):
-            st.plotly_chart(
-                plot_horizon_metric(
-                    recent_metrics, "RMSE_mean", "RMSE (Last Run)", "RMSE"
-                ),
-                use_container_width=True,
-            )
-        else:
-            st.warning("No validated recent runs found.")
-    with tab4:
-        if any(v is not None for v in recent_metrics.values()):
-            st.plotly_chart(
-                plot_horizon_metric(
-                    recent_metrics, "SMAPE_mean", "SMAPE (Last Run)", "SMAPE (%)"
-                ),
-                use_container_width=True,
-            )
-        else:
-            st.warning("No validated recent runs found.")
-
-    # --- 5. SYSTEM STATS (Legacy) ---
-    st.markdown("---")
+    Args:
+        sys_stats_path: Path to the JSON file containing pipeline statistics.
+    """
     with st.expander("System & Pipeline Stats"):
         process = psutil.Process(os.getpid())
-        col1, col2 = st.columns(2)
-        col1.metric("RAM", f"{int(process.memory_info().rss / 1024 / 1024)} MB")
-        col2.metric("CPU", f"{psutil.cpu_percent()}%")
+        mem_info = process.memory_info()
+        current_process_ram = mem_info.rss / 1024 / 1024
 
-        if os.path.exists(file_path):
-            with open(file_path, "r") as f:
+        sys_mem = psutil.virtual_memory()
+        percent_ram = sys_mem.percent
+
+        disk = psutil.disk_usage(".")
+        free_disk = disk.free / 1024 / 1024 / 1024
+        total_disk = disk.total / 1024 / 1024 / 1024
+
+        space_id = os.environ.get("SPACE_ID", "Local/Unknown")
+
+        st.caption(f"Hosting Environment: {space_id}")
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric(
+            "RAM Usage (System)",
+            f"{percent_ram}%",
+            f"{int(current_process_ram)}MB used by App",
+        )
+
+        col2.metric("CPU Usage", f"{psutil.cpu_percent()}%")
+
+        col3.metric("Disk Free", f"{free_disk:.1f} GB", f"of {total_disk:.1f} GB")
+
+        st.markdown("---")
+
+        st.write("Github Actions Pipeline Stats:")
+        if os.path.exists(sys_stats_path):
+            with open(sys_stats_path, "r") as f:
                 stats = json.load(f)
-            st.write(stats)
+            st.json(stats)
+        else:
+            st.warning("No external pipeline stats found.")
+
+
+def render_admin_dashboard(
+    df_history: pd.DataFrame, preds: dict, preds_all: dict, cfg: dict
+) -> None:
+    """Renders the complete Admin Dashboard Streamlit interface.
+
+    Orchestrates health checks, system stats display, pollutant performance analysis,
+    and data inspection tabs.
+
+    Args:
+        df_history: DataFrame containing historical air quality data.
+        preds: Dictionary of DataFrames containing recent model predictions.
+        preds_all: Dictionary of DataFrames containing all model predictions (raw).
+        cfg: Configuration dictionary containing deployment paths and settings.
+    """
+    sys_stats_path = cfg["deployment"]["system_usage_path"]
+    alert_file_path = cfg["deployment"]["alert_file"]
+    st.title("Admin Dashboard")
+
+    check_and_alert_health(df_history, sys_stats_path, alert_file_path)
+
+    show_system_and_pipeline_stats(sys_stats_path)
+
+    pollutants = {
+        "NO₂ (Nitrogen Dioxide)": "nitrogen_dioxide",
+        "O₃ (Ozone)": "ozone",
+        "PM10": "pm10",
+        "PM2.5": "pm2_5",
+    }
+
+    for pol_label, target_col in pollutants.items():
+        st.markdown("---")
+        st.header(f"{pol_label}")
+
+        agg_metrics = {}
+        for model_name, df_all_predictions in preds_all.items():
+            if target_col != "nitrogen_dioxide" and model_name == "GRU":
+                continue
+            stats_all, _ = get_horizon_metrics(
+                df_history, df_all_predictions, pollutant=target_col
+            )
+            if stats_all is not None:
+                agg_metrics[model_name] = stats_all
+
+        df_perf_history = get_performance_over_time(
+            df_history, preds_all, pollutant=target_col
+        )
+        if not df_perf_history.empty:
+            df_perf_history["prediction_generated_at"] = df_perf_history[
+                "prediction_generated_at"
+            ].dt.tz_convert("Europe/Amsterdam")
+
+        st.subheader(f"Global Horizon Analysis ({pol_label})")
+        st.caption(
+            "Error vs. Forecast Horizon (1-72h). Shaded area shows approximate confidence (RMSE +/- StdDev)."
+        )
+
+        tab1, tab2 = st.tabs([f"RMSE - {pol_label}", f"SMAPE - {pol_label}"])
+        with tab1:
+            toggle = st.toggle("CI Toggle", key=f"ci_toggle_{target_col}")
+            if agg_metrics:
+                fig = plot_horizon_metric(
+                    agg_metrics,
+                    "RMSE_mean",
+                    f"Avg RMSE per Horizon Step ({pol_label})",
+                    "RMSE",
+                    show_ci=toggle,
+                )
+                st.plotly_chart(fig, width="stretch")
+            else:
+                st.info("No model data available for this metric.")
+
+        with tab2:
+            if agg_metrics:
+                fig = plot_horizon_metric(
+                    agg_metrics,
+                    "SMAPE_mean",
+                    f"Avg SMAPE per Horizon Step ({pol_label})",
+                    "SMAPE (%)",
+                    show_ci=False,
+                )
+                st.plotly_chart(fig, width="stretch")
+            else:
+                st.info("No model data available for this metric.")
+
+        st.subheader(f"Performance Evolution ({pol_label})")
+
+        if not df_perf_history.empty:
+            tab_ev1, tab_ev2 = st.tabs(["RMSE History", "SMAPE History"])
+
+            with tab_ev1:
+                fig_ev_rmse = px.line(
+                    df_perf_history,
+                    x="prediction_generated_at",
+                    y="RMSE",
+                    color="Model",
+                    title=f"RMSE per Forecast Run ({pol_label})",
+                    markers=True,
+                )
+                fig_ev_rmse.update_layout(
+                    xaxis_title="Run Time", yaxis_title="Average RMSE"
+                )
+                st.plotly_chart(fig_ev_rmse, width="stretch")
+
+            with tab_ev2:
+                fig_ev_smape = px.line(
+                    df_perf_history,
+                    x="prediction_generated_at",
+                    y="SMAPE",
+                    color="Model",
+                    title=f"SMAPE per Forecast Run ({pol_label})",
+                    markers=True,
+                )
+                fig_ev_smape.update_layout(
+                    xaxis_title="Run Time", yaxis_title="Average SMAPE (%)"
+                )
+                st.plotly_chart(fig_ev_smape, width="stretch")
+        else:
+            st.info("Not enough historical data yet (need completed 72h runs).")
+
+    st.markdown("---")
+
+    with st.expander("1. Inspect API Data (History)", expanded=False):
+        if df_history.empty:
+            st.error("API History DataFrame is empty!")
+        else:
+            st.write(f"Rows: {len(df_history)}")
+            safe_display_df(df_history)
+
+    with st.expander("2. Inspect Predictions", expanded=False):
+        if not preds:
+            st.error("No prediction models found!")
+        for model_name, df_p in preds.items():
+            st.subheader(f"Model: {model_name}")
+            safe_display_df(df_p)
+
+    with st.expander("3. Inspect All Predictions (Raw)", expanded=False):
+        if not preds_all:
+            st.error("No prediction models found!")
+        for model_name, df_p in preds_all.items():
+            st.subheader(f"Model: {model_name}")
+            safe_display_df(df_p)
