@@ -24,7 +24,7 @@ def main() -> None:
     Returns:
         None.
     """
-    cfg = load_config("config_training.yaml")
+    cfg = load_config("configs/config_training.yaml")
     device = get_device(cfg["training"].get("device", "auto"))
 
     model_names = ["multigru_best_model", "hgru_best_model", "gru_best_model"]

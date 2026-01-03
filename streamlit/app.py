@@ -40,7 +40,7 @@ with st.sidebar:
                 st.rerun()
 
 try:
-    with open(str(project_root / "config_deployment.yaml")) as f:
+    with open(str(project_root / "configs/config_deployment.yaml")) as f:
         cfg = yaml.safe_load(f)
     df_history, preds, preds_all = load_data(
         cfg["deployment"]["history_path"], cfg["deployment"]["predictions_dir"]

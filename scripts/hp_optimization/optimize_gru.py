@@ -102,7 +102,7 @@ def main() -> None:
     """
 
     ctx = setup_experiment(
-        "config_training.yaml",
+        "configs/config_training.yaml",
         experiment_name="GRU_Optimization_Optuna",
     )
     cfg = ctx["cfg"]

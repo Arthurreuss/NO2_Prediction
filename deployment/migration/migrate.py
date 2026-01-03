@@ -30,7 +30,7 @@ def migrate() -> None:
     """
     load_dotenv()
     device = get_device()
-    cfg = load_config("config_deployment.yaml")
+    cfg = load_config("configs/config_deployment.yaml")
     migration_cfg = cfg["deployment"]["migration"]
     dags_uri = migration_cfg["dags_uri"]
     local_scaler_path = migration_cfg["scaler_path"]

@@ -11,7 +11,7 @@ from src.utils.device import get_device
 
 
 def setup_experiment(
-    config_path: str = "config_training.yaml",
+    config_path: str = "configs/config_training.yaml",
     experiment_name: Optional[str] = None,
     single_sensor: bool = True,
 ) -> Dict[str, Any]:
