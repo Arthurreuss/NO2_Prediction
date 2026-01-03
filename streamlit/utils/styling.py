@@ -3,119 +3,104 @@ def get_aqi_category(
 ) -> tuple[str, str, str]:
     """Determines the Air Quality Index (AQI) category, color code, and description.
 
-    Based on the official European Air Quality Index (EEA) for hourly concentrations.
-    Ref: https://airindex.eea.europa.eu/
+    Based on the official European Air Quality Index (EEA) standards as shown in
+    the provided documentation (Index levels & Health messages).
 
     Args:
         value: The pollutant concentration value (e.g., µg/m³).
-        pollutant: The specific pollutant identifier (e.g., "no2", "pm10", "so2").
+        pollutant: The specific pollutant identifier (e.g., "no2", "pm10").
             Defaults to "nitrogen_dioxide".
 
     Returns:
         A tuple containing three strings:
-            1. The AQI Category (e.g., "Good", "Extremely Poor").
-            2. The Hex color code (Official EEA colors).
-            3. A short text description/advisory (Based on health messages).
+            1. The AQI Category (e.g., "Good", "Extremely poor").
+            2. The Hex color code (matching the EEA official styling).
+            3. A combined text description containing advice for both
+               General and Sensitive populations.
     """
     p = pollutant.lower()
 
-    c_good = "#50F0E6"
-    c_fair = "#50CCAA"
-    c_moderate = "#F0E641"
-    c_poor = "#FF5050"
-    c_very_poor = "#960032"
-    c_extremely_poor = "#7D2181"
+    c_good = "#50F0E6"  # Turquoise
+    c_fair = "#50CCAA"  # Greenish Teal
+    c_moderate = "#F0E641"  # Yellow
+    c_poor = "#FF5050"  # Red
+    c_very_poor = "#960032"  # Dark Red
+    c_extremely_poor = "#7D2181"  # Purple
+
+    msg_good = (
+        "Good",
+        c_good,
+        "General: The air quality is good. Enjoy your usual outdoor activities. | "
+        "Sensitive: The air quality is good. Enjoy your usual outdoor activities.",
+    )
+    msg_fair = (
+        "Fair",
+        c_fair,
+        "General: Enjoy your usual outdoor activities. | "
+        "Sensitive: Enjoy your usual outdoor activities.",
+    )
+    msg_moderate = (
+        "Moderate",
+        c_moderate,
+        "General: Enjoy your usual outdoor activities. | "
+        "Sensitive: Consider reducing intense outdoor activities, if you experience symptoms.",
+    )
+    msg_poor = (
+        "Poor",
+        c_poor,
+        "General: Consider reducing intense activities outdoors, if you experience symptoms "
+        "such as sore eyes, a cough or sore throat. | "
+        "Sensitive: Consider reducing physical activities, particularly outdoors, "
+        "especially if you experience symptoms.",
+    )
+    msg_very_poor = (
+        "Very poor",
+        c_very_poor,
+        "General: Consider reducing intense activities outdoors, if you experience symptoms "
+        "such as sore eyes, a cough or sore throat. | "
+        "Sensitive: Reduce physical activities, particularly outdoors, "
+        "especially if you experience symptoms.",
+    )
+    msg_extremely_poor = (
+        "Extremely poor",
+        c_extremely_poor,
+        "General: Reduce physical activities outdoors. | "
+        "Sensitive: Avoid physical activities outdoors.",
+    )
+
+    def select_category(val, thresholds):
+        if val <= thresholds[0]:
+            return msg_good
+        if val <= thresholds[1]:
+            return msg_fair
+        if val <= thresholds[2]:
+            return msg_moderate
+        if val <= thresholds[3]:
+            return msg_poor
+        if val <= thresholds[4]:
+            return msg_very_poor
+        return msg_extremely_poor
 
     if p in ["no2", "nitrogen_dioxide"]:
-        if value <= 10:
-            return "Good", c_good, "Enjoy usual activities"
-        if value <= 25:
-            return "Fair", c_fair, "Enjoy usual activities"
-        if value <= 60:
-            return (
-                "Moderate",
-                c_moderate,
-                "Sensitive: Consider reducing intense activity",
-            )
-        if value <= 100:
-            return "Poor", c_poor, "Sensitive: Reduce intense activity"
-        if value <= 150:
-            return "Very Poor", c_very_poor, "General: Reduce intense activity"
-        return "Extremely Poor", c_extremely_poor, "General: Avoid outdoor activity"
+        return select_category(value, [10, 25, 60, 100, 150])
 
     elif p in ["o3", "ozone"]:
-        if value <= 60:
-            return "Good", c_good, "Enjoy usual activities"
-        if value <= 100:
-            return "Fair", c_fair, "Enjoy usual activities"
-        if value <= 120:
-            return (
-                "Moderate",
-                c_moderate,
-                "Sensitive: Consider reducing intense activity",
-            )
-        if value <= 160:
-            return "Poor", c_poor, "Sensitive: Reduce intense activity"
-        if value <= 180:
-            return "Very Poor", c_very_poor, "General: Reduce intense activity"
-        return "Extremely Poor", c_extremely_poor, "General: Avoid outdoor activity"
+        return select_category(value, [60, 100, 120, 160, 180])
 
     elif p in ["pm10"]:
-        if value <= 15:
-            return "Good", c_good, "Enjoy usual activities"
-        if value <= 45:
-            return "Fair", c_fair, "Enjoy usual activities"
-        if value <= 120:
-            return (
-                "Moderate",
-                c_moderate,
-                "Sensitive: Consider reducing intense activity",
-            )
-        if value <= 195:
-            return "Poor", c_poor, "Sensitive: Reduce intense activity"
-        if value <= 270:
-            return "Very Poor", c_very_poor, "General: Reduce intense activity"
-        return "Extremely Poor", c_extremely_poor, "General: Avoid outdoor activity"
+        return select_category(value, [15, 45, 120, 195, 270])
 
     elif p in ["pm2_5", "pm2.5"]:
-        if value <= 5:
-            return "Good", c_good, "Enjoy usual activities"
-        if value <= 15:
-            return "Fair", c_fair, "Enjoy usual activities"
-        if value <= 50:
-            return (
-                "Moderate",
-                c_moderate,
-                "Sensitive: Consider reducing intense activity",
-            )
-        if value <= 90:
-            return "Poor", c_poor, "Sensitive: Reduce intense activity"
-        if value <= 140:
-            return "Very Poor", c_very_poor, "General: Reduce intense activity"
-        return "Extremely Poor", c_extremely_poor, "General: Avoid outdoor activity"
+        return select_category(value, [5, 15, 50, 90, 140])
 
     elif p in ["so2", "sulphur_dioxide", "sulfur_dioxide"]:
-        if value <= 20:
-            return "Good", c_good, "Enjoy usual activities"
-        if value <= 40:
-            return "Fair", c_fair, "Enjoy usual activities"
-        if value <= 125:
-            return (
-                "Moderate",
-                c_moderate,
-                "Sensitive: Consider reducing intense activity",
-            )
-        if value <= 190:
-            return "Poor", c_poor, "Sensitive: Reduce intense activity"
-        if value <= 275:
-            return "Very Poor", c_very_poor, "General: Reduce intense activity"
-        return "Extremely Poor", c_extremely_poor, "General: Avoid outdoor activity"
+        return select_category(value, [20, 40, 125, 190, 275])
 
     return "Unknown", "#808080", "No standard available"
 
 
 def get_aqi_thresholds(pollutant: str) -> list[int]:
-    """Retrieves the numeric boundary values for AQI categories.
+    """Retrieves the numeric upper bound values for AQI categories.
 
     Used to draw background color bands on charts.
 
@@ -123,9 +108,9 @@ def get_aqi_thresholds(pollutant: str) -> list[int]:
         pollutant: The specific pollutant identifier.
 
     Returns:
-        A list of FIVE integers representing the upper bounds for:
-        "Good", "Fair", "Moderate", "Poor", and "Very Poor".
-        Anything above the last value is "Extremely Poor".
+        A list of five integers representing the upper bounds for:
+        Good, Fair, Moderate, Poor, and Very poor.
+        (Anything above the last value is Extremely poor).
     """
     p = pollutant.lower()
     if p in ["no2", "nitrogen_dioxide"]:
