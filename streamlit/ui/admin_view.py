@@ -155,7 +155,7 @@ def render_admin_dashboard(df_history, preds, preds_all):
     with open("config_deployment.yaml") as f:
         cfg = yaml.safe_load(f)
 
-    file_path = cfg["system_usage_path"]
+    file_path = cfg["deployment"]["system_usage_path"]
     if os.path.exists(file_path):
         with open(file_path, "r") as f:
             stats = json.load(f)

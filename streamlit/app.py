@@ -39,7 +39,7 @@ try:
     with open("config_deployment.yaml") as f:
         cfg = yaml.safe_load(f)
     df_history, preds, preds_all = load_data(
-        cfg["history_path"], cfg["predictions_dir"]
+        cfg["deployment"]["history_path"], cfg["deployment"]["predictions_dir"]
     )
 except Exception as e:
     st.error(f"Error loading data: {e}")
