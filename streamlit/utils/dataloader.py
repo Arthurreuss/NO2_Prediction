@@ -3,15 +3,13 @@ import os
 
 import numpy as np
 import pandas as pd
-from pyexpat import model
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 import streamlit as st
 
 
 @st.cache_data(ttl=300)
-def load_data():
-    history_path = "data/deployment/processed/continuous_history.parquet"
+def load_data(history_path, predictions_dir):
     if os.path.exists(history_path):
         df_history = pd.read_parquet(history_path)
         if df_history["time"].dt.tz is None:
@@ -23,7 +21,6 @@ def load_data():
 
     preds = {}
     preds_all = {}
-    predictions_dir = "data/deployment/predictions"
     pred_files = glob.glob(os.path.join(predictions_dir, "*_predictions.parquet"))
     for f in pred_files:
         model_name = (
