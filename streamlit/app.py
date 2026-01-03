@@ -65,6 +65,4 @@ elif page == "Admin Panel":
     if st.session_state["logged_in"]:
         st.info("Please log in from the sidebar using 'admin' / 'admin'.")
     else:
-        render_admin_dashboard(
-            df_history, preds, preds_all, cfg["deployment"]["system_usage_path"]
-        )
+        render_admin_dashboard(df_history, preds, preds_all, cfg)

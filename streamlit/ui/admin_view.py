@@ -1,7 +1,6 @@
 import json
 import os
 import smtplib
-from datetime import datetime
 from email.message import EmailMessage
 
 import pandas as pd
@@ -21,7 +20,7 @@ def send_alert_email(subject, body):
     smtp_port = int(os.environ.get("SMTP_PORT", 465))
 
     if not user or not password or not to_email:
-        print("⚠️ Email credentials missing. Skipping alert email.")
+        print("Email credentials missing. Skipping alert email.")
         return
 
     msg = EmailMessage()
@@ -39,11 +38,7 @@ def send_alert_email(subject, body):
         print(f"Failed to send alert email: {e}")
 
 
-def check_and_alert_health(df_history, sys_stats_path):
-    """
-    Checks for system anomalies (High RAM, Low Disk, Stale Data)
-    and sends an email if 'something is off'.
-    """
+def check_and_alert_health(df_history, sys_stats_path, alert_file):
     issues = []
 
     mem = psutil.virtual_memory()
@@ -66,8 +61,10 @@ def check_and_alert_health(df_history, sys_stats_path):
             last_run_str = stats.get("last_run")
             if last_run_str:
                 last_run = pd.to_datetime(last_run_str)
+                if last_run.tz is None:
+                    last_run = last_run.tz_localize("UTC")
 
-                now = pd.Timestamp.now(tz="Europe/Amsterdam")
+                now = pd.Timestamp.now(tz="UTC")
                 diff_hours = (now - last_run).total_seconds() / 3600
 
                 if diff_hours > 3:
@@ -78,7 +75,28 @@ def check_and_alert_health(df_history, sys_stats_path):
             issues.append(f"ERROR: Could not parse pipeline stats: {e}")
 
     if issues:
-        if "alert_sent_session" not in st.session_state:
+        should_send = True
+
+        if os.path.exists(alert_file):
+            try:
+                with open(alert_file, "r") as f:
+                    cooldown_data = json.load(f)
+
+                last_sent_str = cooldown_data.get("last_sent")
+                if last_sent_str:
+                    last_sent = pd.to_datetime(last_sent_str)
+                    now = pd.Timestamp.now()
+                    seconds_since_last = (now - last_sent).total_seconds()
+
+                    if seconds_since_last < 3600:  # 3600 seconds = 1 hour
+                        should_send = False
+                        print(
+                            f"Skipping email alert. Last sent {int(seconds_since_last/60)} min ago."
+                        )
+            except Exception:
+                pass
+
+        if should_send:
             subject = f"Admin Dashboard Alert: {len(issues)} Issues Detected"
             body = (
                 "The following issues were detected on your dashboard:\n\n"
@@ -87,12 +105,18 @@ def check_and_alert_health(df_history, sys_stats_path):
 
             send_alert_email(subject, body)
 
-            st.session_state["alert_sent_session"] = True
-            st.toast(f"Alert sent: {len(issues)} issues detected.", icon="⚠️")
+            with open(alert_file, "w") as f:
+                json.dump({"last_sent": str(pd.Timestamp.now())}, f)
+
+            st.toast(f"Alert sent via Email ({len(issues)} issues).")
 
         with st.expander("Active System Alerts", expanded=True):
             for issue in issues:
                 st.error(issue)
+            if not should_send:
+                st.caption(
+                    "ℹ️ Email notification suppressed (Cooldown active: Max 1 email/hour)."
+                )
 
 
 def safe_display_df(df, limit=500):
@@ -203,10 +227,12 @@ def show_system_and_pipeline_stats(sys_stats_path):
             st.warning("No external pipeline stats found.")
 
 
-def render_admin_dashboard(df_history, preds, preds_all, sys_stats_path):
+def render_admin_dashboard(df_history, preds, preds_all, cfg):
+    sys_stats_path = cfg["deployment"]["system_usage_path"]
+    alert_file_path = cfg["deployment"]["alert_file"]
     st.title("Admin Dashboard")
 
-    check_and_alert_health(df_history, sys_stats_path)
+    check_and_alert_health(df_history, sys_stats_path, alert_file_path)
 
     show_system_and_pipeline_stats(sys_stats_path)
 
