@@ -13,7 +13,7 @@ import streamlit as st
 from utils.model_evaluation import evaluate_model_performance
 
 
-def render_admin_dashboard(df_history, preds, preds_all):
+def render_admin_dashboard(df_history, preds, preds_all, file_path):
     """
     preds: Dict of simple line predictions (legacy/plotting)
     preds_all: Dict of {model_name: [list of forecast dfs]} containing full 72h horizon data
@@ -155,7 +155,6 @@ def render_admin_dashboard(df_history, preds, preds_all):
     with open("config_deployment.yaml") as f:
         cfg = yaml.safe_load(f)
 
-    file_path = cfg["deployment"]["system_usage_path"]
     if os.path.exists(file_path):
         with open(file_path, "r") as f:
             stats = json.load(f)

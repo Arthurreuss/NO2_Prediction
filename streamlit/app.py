@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import yaml
 from streamlit_autorefresh import st_autorefresh
 from ui.admin_view import render_admin_dashboard
@@ -5,6 +7,8 @@ from ui.user_view import render_user_dashboard
 
 import streamlit as st
 from utils.dataloader import load_data
+
+project_root = Path(__file__).parent.parent
 
 st.set_page_config(page_title="Utrecht NO2 Forecasting", layout="wide")
 
@@ -36,7 +40,7 @@ with st.sidebar:
                 st.rerun()
 
 try:
-    with open("config_deployment.yaml") as f:
+    with open(str(project_root / "config_deployment.yaml")) as f:
         cfg = yaml.safe_load(f)
     df_history, preds, preds_all = load_data(
         cfg["deployment"]["history_path"], cfg["deployment"]["predictions_dir"]
@@ -56,6 +60,8 @@ if page == "Public Dashboard":
 
 elif page == "Admin Panel":
     if st.session_state["logged_in"]:
-        render_admin_dashboard(df_history, preds, preds_all)
+        render_admin_dashboard(
+            df_history, preds, preds_all, cfg["deployment"]["system_usage_path"]
+        )
     else:
         st.info("Please log in from the sidebar using 'admin' / 'admin'.")
