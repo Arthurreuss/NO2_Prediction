@@ -199,7 +199,7 @@ def render_user_dashboard(df_history, preds):
         dragmode="pan",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.info(
         f"ℹ️ Guidelines based on European Environment Agency (EEA) standards for {selected_label}."
     )

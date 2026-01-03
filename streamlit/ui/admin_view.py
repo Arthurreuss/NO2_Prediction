@@ -13,6 +13,30 @@ import streamlit as st
 from utils.model_evaluation import get_horizon_metrics, get_performance_over_time
 
 
+def safe_display_df(df, limit=500):
+    """
+    Converts datetime columns to string to prevent PyArrow/Streamlit crashes
+    with 'Europe/Amsterdam' timezones.
+    """
+    if df is None or df.empty:
+        st.write("Empty DataFrame")
+        return
+
+    # Create a copy to not modify the original data used for plotting
+    display_df = df.head(limit).copy()
+
+    # Convert all datetime columns (including index if datetime) to string
+    for col in display_df.select_dtypes(include=["datetime", "datetimetz"]).columns:
+        display_df[col] = display_df[col].astype(str)
+
+    # Also check specific column names just in case dtype detection missed it
+    for col in ["time", "prediction_generated_at"]:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].astype(str)
+
+    st.dataframe(display_df)
+
+
 def plot_horizon_metric(data_dict, metric_col, title, y_label, show_ci=False):
     """Helper for Horizon Plots (Aggregated Step View)"""
     fig = go.Figure()
@@ -61,50 +85,28 @@ def plot_horizon_metric(data_dict, metric_col, title, y_label, show_ci=False):
     return fig
 
 
-def render_admin_dashboard(df_history, preds, preds_all, file_path):
+def render_admin_dashboard(df_history, preds, preds_all, sys_stats_path):
     st.title("Admin Dashboard")
 
-    # --- 1. PRE-CALCULATE DATA ---
     agg_metrics = {}
     recent_metrics = {}
     recent_run_time_str = "N/A"
 
-    # A. Horizon Analysis (Step-by-Step)
     for model_name, df_all_predictions in preds_all.items():
-        # Global Aggregate
-        stats_all, _ = get_horizon_metrics(df_history, df_all_predictions)
+        # add confidence bands
+        # make plots for the other polutants
+        # if model name gru or df_all_predictions dimesnsion of gru then only do for nitrogen dioxide
+        stats_all, _ = get_horizon_metrics(
+            df_history, df_all_predictions, "nitrogen_dioxide"
+        )
         agg_metrics[model_name] = stats_all
 
-        # Single Recent Run (Manual Split)
-        # --- FIX: Manually split DataFrame to find the latest valid run ---
-        if "prediction_generated_at" in df_all_predictions.columns:
-            unique_gen_times = sorted(
-                df_all_predictions["prediction_generated_at"].unique(), reverse=True
-            )
-
-            best_overlap_run = None
-            # Search backwards for a run with enough validation data
-            for gen_time in unique_gen_times:
-                single_run_df = df_all_predictions[
-                    df_all_predictions["prediction_generated_at"] == gen_time
-                ].copy()
-                run_stats, _ = get_horizon_metrics(df_history, single_run_df)
-
-                if (
-                    run_stats is not None and run_stats["Count"].sum() >= 24
-                ):  # Require at least 24h overlap
-                    best_overlap_run = run_stats
-                    ts = pd.to_datetime(gen_time)
-                    recent_run_time_str = ts.strftime("%Y-%m-%d %H:%M UTC")
-                    break
-
-            recent_metrics[model_name] = best_overlap_run
-
     # B. Performance Over Time (New Feature)
-    df_perf_history = get_performance_over_time(df_history, preds_all)
+    df_perf_history = get_performance_over_time(
+        df_history, preds_all, "nitrogen_dioxide"
+    )
 
-    # --- 2. GLOBAL HORIZON PLOTS ---
-    st.subheader("🌍 Global Horizon Analysis (Aggregated)")
+    st.subheader("Global Horizon Analysis (Aggregated)")
     st.caption(
         "How does error increase as we forecast further into the future? (Averaged over all history)"
     )
@@ -115,20 +117,19 @@ def render_admin_dashboard(df_history, preds, preds_all, file_path):
             plot_horizon_metric(
                 agg_metrics, "RMSE_mean", "Avg RMSE per Horizon Step", "RMSE"
             ),
-            use_container_width=True,
+            width="stretch",
         )
     with tab2:
         st.plotly_chart(
             plot_horizon_metric(
                 agg_metrics, "SMAPE_mean", "Avg SMAPE per Horizon Step", "SMAPE (%)"
             ),
-            use_container_width=True,
+            width="stretch",
         )
 
     st.markdown("---")
 
-    # --- 3. PERFORMANCE EVOLUTION PLOTS (NEW) ---
-    st.subheader("📈 Model Performance Evolution")
+    st.subheader("Model Performance Evolution")
     st.caption(
         "Average error per forecast run (72h) over time. Only showing completed runs (>3 days old)."
     )
@@ -148,7 +149,7 @@ def render_admin_dashboard(df_history, preds, preds_all, file_path):
             fig_ev_rmse.update_layout(
                 xaxis_title="Run Time", yaxis_title="Average RMSE"
             )
-            st.plotly_chart(fig_ev_rmse, use_container_width=True)
+            st.plotly_chart(fig_ev_rmse, width="stretch")
 
         with tab_ev2:
             fig_ev_smape = px.line(
@@ -162,7 +163,7 @@ def render_admin_dashboard(df_history, preds, preds_all, file_path):
             fig_ev_smape.update_layout(
                 xaxis_title="Run Time", yaxis_title="Average SMAPE (%)"
             )
-            st.plotly_chart(fig_ev_smape, use_container_width=True)
+            st.plotly_chart(fig_ev_smape, width="stretch")
     else:
         st.info(
             "Not enough historical data yet to show performance evolution (need runs older than 72h)."
@@ -170,34 +171,30 @@ def render_admin_dashboard(df_history, preds, preds_all, file_path):
 
     st.markdown("---")
 
-    # --- 4. RECENT RUN ANALYSIS ---
-    st.subheader("⏱️ Recent Run Analysis")
-    st.caption(
-        f"Performance of the most recent validatable forecast run (Run Time: {recent_run_time_str})"
-    )
-
-    tab3, tab4 = st.tabs(["RMSE (Last Run)", "SMAPE (Last Run)"])
-    with tab3:
-        if any(v is not None for v in recent_metrics.values()):
-            st.plotly_chart(
-                plot_horizon_metric(
-                    recent_metrics, "RMSE_mean", "RMSE (Last Run)", "RMSE"
-                ),
-                use_container_width=True,
-            )
+    # --- 5. INSPECTION & SYSTEM STATS (FIXED) ---
+    with st.expander("1. Inspect API Data (History)", expanded=False):
+        if df_history.empty:
+            st.error("API History DataFrame is empty!")
         else:
-            st.warning("No validated recent runs found.")
-    with tab4:
-        if any(v is not None for v in recent_metrics.values()):
-            st.plotly_chart(
-                plot_horizon_metric(
-                    recent_metrics, "SMAPE_mean", "SMAPE (Last Run)", "SMAPE (%)"
-                ),
-                use_container_width=True,
-            )
-        else:
-            st.warning("No validated recent runs found.")
+            st.write(f"Rows: {len(df_history)}")
+            # --- CRITICAL FIX: Safe Display ---
+            safe_display_df(df_history)
 
+    with st.expander("2. Inspect Predictions", expanded=False):
+        if not preds:
+            st.error("No prediction models found!")
+        for model_name, df_p in preds.items():
+            st.subheader(f"Model: {model_name}")
+            # --- CRITICAL FIX: Safe Display ---
+            safe_display_df(df_p)
+
+    with st.expander("3. Inspect All Predictions (Raw)", expanded=False):
+        if not preds_all:
+            st.error("No prediction models found!")
+        for model_name, df_p in preds_all.items():
+            st.subheader(f"Model: {model_name}")
+            # --- CRITICAL FIX: Safe Display ---
+            safe_display_df(df_p)
     # --- 5. SYSTEM STATS (Legacy) ---
     st.markdown("---")
     with st.expander("System & Pipeline Stats"):
@@ -206,7 +203,7 @@ def render_admin_dashboard(df_history, preds, preds_all, file_path):
         col1.metric("RAM", f"{int(process.memory_info().rss / 1024 / 1024)} MB")
         col2.metric("CPU", f"{psutil.cpu_percent()}%")
 
-        if os.path.exists(file_path):
-            with open(file_path, "r") as f:
+        if os.path.exists(sys_stats_path):
+            with open(sys_stats_path, "r") as f:
                 stats = json.load(f)
             st.write(stats)

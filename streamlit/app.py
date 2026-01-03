@@ -10,6 +10,9 @@ from utils.dataloader import load_data
 
 project_root = Path(__file__).parent.parent
 
+with open(str(project_root / "configs/config_deployment.yaml")) as f:
+    cfg = yaml.safe_load(f)
+
 st.set_page_config(page_title="Utrecht NO2 Forecasting", layout="wide")
 
 count = st_autorefresh(interval=300000, key="data_refresh")
@@ -40,8 +43,6 @@ with st.sidebar:
                 st.rerun()
 
 try:
-    with open(str(project_root / "configs/config_deployment.yaml")) as f:
-        cfg = yaml.safe_load(f)
     df_history, preds, preds_all = load_data(
         cfg["deployment"]["history_path"], cfg["deployment"]["predictions_dir"]
     )
@@ -60,8 +61,8 @@ if page == "Public Dashboard":
 
 elif page == "Admin Panel":
     if st.session_state["logged_in"]:
+        st.info("Please log in from the sidebar using 'admin' / 'admin'.")
+    else:
         render_admin_dashboard(
             df_history, preds, preds_all, cfg["deployment"]["system_usage_path"]
         )
-    else:
-        st.info("Please log in from the sidebar using 'admin' / 'admin'.")
