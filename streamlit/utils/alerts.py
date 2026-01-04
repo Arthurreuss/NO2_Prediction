@@ -1,8 +1,10 @@
+import datetime
 import json
 import os
 import smtplib
 from email.message import EmailMessage
 
+import dateutil.parser
 import pandas as pd
 import psutil
 
@@ -54,6 +56,15 @@ def check_and_alert_health(
         sys_stats_path: Path to the JSON file containing pipeline run statistics.
         alert_file: Path to the JSON file used to store/check alert cooldown timestamps.
     """
+    with st.expander("Admin Controls", expanded=True):
+        if st.button("Reset Email Cooldown"):
+            if os.path.exists(alert_file):
+                os.remove(alert_file)
+                st.success("Cooldown reset! You can now trigger a new email.")
+                st.rerun()
+            else:
+                st.info("No active cooldown found.")
+
     issues = []
 
     mem = psutil.virtual_memory()
@@ -72,63 +83,56 @@ def check_and_alert_health(
         try:
             with open(sys_stats_path, "r") as f:
                 stats = json.load(f)
-
             last_run_str = stats.get("last_run")
             if last_run_str:
                 last_run = pd.to_datetime(last_run_str)
-                if last_run.tz is None:
-                    last_run = last_run.tz_localize("UTC")
+                last_run = last_run.tz_convert("Europe/Amsterdam")
 
-                now = pd.Timestamp.now(tz="UTC")
-                diff_hours = (now - last_run).total_seconds() / 3600
+                now_ams = pd.Timestamp.now(tz="Europe/Amsterdam")
+                diff_hours = (now_ams - last_run).total_seconds() / 3600
 
                 if diff_hours > 3:
                     issues.append(
-                        f"WARNING: Pipeline Data Stale. Last run was {diff_hours:.1f} hours ago."
+                        f"WARNING: Pipeline Stale. Last run {diff_hours:.1f} hours ago."
                     )
-        except Exception as e:
-            issues.append(f"ERROR: Could not parse pipeline stats: {e}")
+        except Exception:
+            pass
 
     if issues:
         should_send = True
+        cooldown_msg = ""
+        now_ams = pd.Timestamp.now(tz="Europe/Amsterdam")
 
         if os.path.exists(alert_file):
             try:
                 with open(alert_file, "r") as f:
-                    cooldown_data = json.load(f)
+                    data = json.load(f)
+                    last_sent = pd.to_datetime(data["last_sent"])
+                    last_sent = last_sent.tz_convert("Europe/Amsterdam")
+                    seconds_since = (now_ams - last_sent).total_seconds()
 
-                last_sent_str = cooldown_data.get("last_sent", None)
-                if last_sent_str:
-                    last_sent = pd.to_datetime(last_sent_str)
-                    now = pd.Timestamp.now()
-                    seconds_since_last = (now - last_sent).total_seconds()
-
-                    if seconds_since_last < 3600:  # 3600 seconds = 1 hour
+                    if seconds_since < 3600:
                         should_send = False
-                        print(
-                            f"Skipping email alert. Last sent {int(seconds_since_last/60)} min ago."
-                        )
+                        mins_left = int((3600 - seconds_since) / 60)
+                        cooldown_msg = f" (Cooldown active: Wait {mins_left} mins)"
             except Exception:
                 pass
 
+        st.error(f"Active System Alerts {cooldown_msg}")
+        for issue in issues:
+            st.write(f"- {issue}")
+
         if should_send:
-            subject = f"Admin Dashboard Alert: {len(issues)} Issues Detected"
-            body = (
-                "The following issues were detected on your dashboard:\n\n"
-                + "\n".join(issues)
-            )
+            subject = f"Dashboard Alert: {len(issues)} Issues Detected"
+            body = "The following issues were detected:\n\n" + "\n".join(issues)
+            success = send_alert_email(subject, body)
 
-            send_alert_email(subject, body)
+            if success:
+                with open(alert_file, "w") as f:
+                    json.dump({"last_sent": now_ams.isoformat()}, f)
+                st.toast("📧 Alert sent to admin!")
+        elif not should_send:
+            st.caption("ℹ️ Email suppressed by cooldown.")
 
-            with open(alert_file, "w") as f:
-                json.dump({"last_sent": str(pd.Timestamp.now())}, f)
-
-            st.toast(f"Alert sent via Email ({len(issues)} issues).")
-
-        with st.expander("Active System Alerts", expanded=True):
-            for issue in issues:
-                st.error(issue)
-            if not should_send:
-                st.caption(
-                    "ℹ️ Email notification suppressed (Cooldown active: Max 1 email/hour)."
-                )
+    else:
+        st.success("System Status: Healthy")

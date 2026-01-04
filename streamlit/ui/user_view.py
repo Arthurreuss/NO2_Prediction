@@ -1,52 +1,8 @@
-import os
-
 import pandas as pd
 import plotly.graph_objects as go
 
 import streamlit as st
 from utils.styling import get_aqi_category, get_aqi_thresholds
-
-
-def check_secrets_debug():
-    """Safe check to see if environment variables are loaded."""
-    st.write("### 🔐 Secrets Diagnostic Check")
-
-    # List of secrets your email function expects
-    required_secrets = [
-        "EMAIL_USER",
-        "EMAIL_PASSWORD",
-        "EMAIL_TO",
-        "SMTP_SERVER",
-        "SMTP_PORT",
-    ]
-
-    status_data = []
-
-    for secret in required_secrets:
-        value = os.environ.get(secret)
-
-        if value:
-            # Show first 2 chars to verify it's not just an empty string
-            # e.g. "my..." or "sm..."
-            masked = f"{value[:2]}..." + "*" * 4
-            status = "✅ Loaded"
-        else:
-            masked = "MISSING"
-            status = "❌ Not Found"
-
-        status_data.append(
-            {"Secret Name": secret, "Status": status, "Value Preview": masked}
-        )
-
-    st.table(status_data)
-
-    # Extra Check: Print ALL keys (filtered) to see if there's a typo
-    # e.g. Did you name it 'MAIL_USER' instead of 'EMAIL_USER'?
-    st.write("**All Available Env Vars (Key Names Only):**")
-    all_keys = [
-        k for k in os.environ.keys() if "EMAIL" in k or "SMTP" in k or "HF" in k
-    ]
-    st.write(all_keys)
 
 
 def render_user_dashboard(
@@ -263,4 +219,3 @@ def render_user_dashboard(
     st.info(
         f"ℹ️ Guidelines based on European Environment Agency (EEA) standards for {selected_label}."
     )
-    check_secrets_debug()
