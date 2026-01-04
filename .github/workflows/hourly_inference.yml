@@ -2,7 +2,7 @@ name: Hourly NO2 Forecast
 
 on:
   schedule:
-    - cron: '1 * * * *'
+    - cron: '8 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -44,6 +44,9 @@ jobs:
           DISK_INFO=$(df -h)
           
           mkdir -p data/deployment
+
+          MEM_AVAILABLE=$(free -h | grep Mem | awk '{print $7}')
+          DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
           
           jq -n \
             --arg last_run "$(TZ='Europe/Amsterdam' date +'%Y-%m-%d %H:%M:%S %Z')" \
