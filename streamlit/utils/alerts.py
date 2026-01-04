@@ -97,7 +97,7 @@ def check_and_alert_health(
                 with open(alert_file, "r") as f:
                     cooldown_data = json.load(f)
 
-                last_sent_str = cooldown_data.get("last_sent")
+                last_sent_str = cooldown_data.get("last_sent", None)
                 if last_sent_str:
                     last_sent = pd.to_datetime(last_sent_str)
                     now = pd.Timestamp.now()
