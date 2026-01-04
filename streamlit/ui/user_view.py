@@ -1,3 +1,5 @@
+import socket
+
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -220,9 +222,6 @@ def render_user_dashboard(
         f"ℹ️ Guidelines based on European Environment Agency (EEA) standards for {selected_label}."
     )
     ### test
-    import socket
-
-    import streamlit as st
 
     def test_smtp_connection():
         st.subheader("🕵️ Network Connectivity Test")
