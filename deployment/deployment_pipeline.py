@@ -64,12 +64,8 @@ class DeploymentPipeline:
         self.history_file = self.cfg["deployment"]["history_path"]
         self.output_dir = self.cfg["deployment"]["predictions_dir"]
         self.models_map = self.cfg["deployment"]["models"]
-        mlflow.set_tracking_uri(
-            "https://dagshub.com/Arthurreuss/NO2_Forecasting.mlflow"
-        )
-        mlflow.set_registry_uri(
-            "https://dagshub.com/Arthurreuss/NO2_Forecasting.mlflow"
-        )
+        mlflow.set_tracking_uri(self.cfg["deployment"]["migration"]["dags_uri"])
+        mlflow.set_registry_uri(self.cfg["deployment"]["migration"]["dags_uri"])
 
     def setup_time_window(self) -> None:
         """Configure the API request window (last 8 days).
@@ -104,9 +100,7 @@ class DeploymentPipeline:
         pipeline = PreProcessingPipeline(cfg=self.cfg)
         df, _, _ = pipeline.preprocess(deployment=True)
 
-        current_hour_ams = pd.Timestamp.now(tz="Europe/Amsterdam").floor(
-            "h"
-        )  # + pd.Timedelta(hours=1)
+        current_hour_ams = pd.Timestamp.now(tz="Europe/Amsterdam").floor("h")
         print(f"Filtering data up to {current_hour_ams}...")
         df["time"] = pd.to_datetime(df["time"]).dt.tz_localize("Europe/Amsterdam")
 
@@ -128,7 +122,6 @@ class DeploymentPipeline:
             df_history = pd.read_parquet(self.history_file)
             df_combined = pd.concat([df_history, df_observed])
             df_combined = df_combined.drop_duplicates(subset=["time"], keep="last")
-            # df_combined = df_combined.sort_values("time").reset_index(drop=True)
             df_combined.to_parquet(self.history_file)
         else:
             df_observed.to_parquet(self.history_file)

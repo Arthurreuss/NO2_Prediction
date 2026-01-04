@@ -98,49 +98,100 @@ def plot_horizon_metric(
     return fig
 
 
+def get_dir_size_mb(start_path: str) -> float:
+    """Recursively calculates the size of a directory in MB.
+
+    Args:
+        start_path (str): The root directory path to begin scanning.
+
+    Returns:
+        float: The total size of the directory in megabytes.
+    """
+    total_size = 0
+    for dirpath, _, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            if not os.path.islink(fp):
+                total_size += os.path.getsize(fp)
+    return total_size / 1024 / 1024
+
+
 def show_system_and_pipeline_stats(sys_stats_path: str) -> None:
     """Displays system resource usage and pipeline statistics in a Streamlit expander.
 
+    This function creates two main visual cards:
+    1. Hugging Face Space Status: Shows real-time RAM, CPU, and Disk usage of the container.
+    2. GitHub Actions Status: Shows the results of the latest automated pipeline run (status, duration, runner stats).
+
     Args:
-        sys_stats_path: Path to the JSON file containing pipeline statistics.
+        sys_stats_path (str): The file path to the JSON file containing statistics
+            from the latest GitHub Actions run.
     """
-    with st.expander("System & Pipeline Stats"):
-        process = psutil.Process(os.getpid())
-        mem_info = process.memory_info()
-        current_process_ram = mem_info.rss / 1024 / 1024
+    with st.expander("System & Pipeline Stats", expanded=False):
+        with st.container(border=True):
+            st.markdown("Hugging Face Space Status")
 
-        sys_mem = psutil.virtual_memory()
-        percent_ram = sys_mem.percent
+            process = psutil.Process(os.getpid())
+            mem_info = process.memory_info()
+            curr_ram = mem_info.rss / 1024 / 1024
+            sys_mem = psutil.virtual_memory()
 
-        disk = psutil.disk_usage(".")
-        free_disk = disk.free / 1024 / 1024 / 1024
-        total_disk = disk.total / 1024 / 1024 / 1024
+            current_script_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.abspath(os.path.join(current_script_dir, ".."))
 
-        space_id = os.environ.get("SPACE_ID", "Local/Unknown")
+            repo_size_mb = get_dir_size_mb(project_root)
+            repo_size_gb = repo_size_mb / 1024
+            hf_limit_gb = 50.0
 
-        st.caption(f"Hosting Environment: {space_id}")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("RAM Usage", f"{sys_mem.percent}%", f"{int(curr_ram)} MB (App)")
+            c2.metric("CPU Usage", f"{psutil.cpu_percent()}%")
+            c3.metric(
+                "Disk Usage",
+                f"{repo_size_mb:.0f} MB",
+                f"{repo_size_gb:.2f} / {hf_limit_gb} GB",
+            )
 
-        col1, col2, col3 = st.columns(3)
+            st.caption(f"Environment ID: {os.environ.get('SPACE_ID', 'Local/Unknown')}")
 
-        col1.metric(
-            "RAM Usage (System)",
-            f"{percent_ram}%",
-            f"{int(current_process_ram)}MB used by App",
-        )
+        with st.container(border=True):
+            st.markdown("GitHub Actions Status")
 
-        col2.metric("CPU Usage", f"{psutil.cpu_percent()}%")
+            if os.path.exists(sys_stats_path):
+                with open(sys_stats_path, "r") as f:
+                    stats = json.load(f)
 
-        col3.metric("Disk Free", f"{free_disk:.1f} GB", f"of {total_disk:.1f} GB")
+                k1, k2, k3 = st.columns(3)
 
-        st.markdown("---")
+                status = stats.get("status", "UNKNOWN")
+                if status.lower() == "success":
+                    k1.success(f"**{status.upper()}**")
+                else:
+                    k1.error(f"**{status.upper()}**")
 
-        st.write("Github Actions Pipeline Stats:")
-        if os.path.exists(sys_stats_path):
-            with open(sys_stats_path, "r") as f:
-                stats = json.load(f)
-            st.json(stats)
-        else:
-            st.warning("No external pipeline stats found.")
+                k2.metric("Duration", f"{stats.get('duration_seconds', 0)}s")
+                k3.metric(
+                    "Last Run",
+                    stats.get("last_run", "N/A").split(" ")[1][:5] + " (CET)",
+                )
+
+                st.divider()
+
+                m1, m2, m3 = st.columns(3)
+                sys_metrics = stats.get("system_metrics", {})
+
+                m1.metric("Runner OS", stats.get("runner_os", "Linux"))
+
+                mem = sys_metrics.get("memory_available", "N/A")
+                mem_disp = mem if len(mem) < 10 else "View JSON"
+                m2.metric("Runner RAM (Avail)", mem_disp)
+
+                disk = sys_metrics.get("disk_free", "N/A")
+                disk_disp = disk if len(disk) < 10 else "View JSON"
+                m3.metric("Runner Disk (Free)", disk_disp)
+
+            else:
+                st.warning("No pipeline statistics found yet.")
 
 
 def render_admin_dashboard(
