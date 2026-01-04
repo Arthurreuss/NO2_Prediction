@@ -77,7 +77,7 @@ class DeploymentPipeline:
         Updates `self.cfg["api_requests"]["time"]` with `start_date` and `end_date`
         formatted as YYYY-MM-DD.
         """
-        today = datetime.now()
+        today = pd.Timestamp.now(tz="Europe/Amsterdam")
         start_dt = today - timedelta(days=8)
         end_dt = today
 

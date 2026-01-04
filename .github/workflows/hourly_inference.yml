@@ -46,7 +46,7 @@ jobs:
           mkdir -p data/deployment
           
           jq -n \
-            --arg last_run "$(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+            --arg last_run "$(TZ='Europe/Amsterdam' date +'%Y-%m-%d %H:%M:%S %Z')" \
             --arg duration "$DURATION" \
             --arg status "success" \
             --arg runner "$RUNNER_OS" \

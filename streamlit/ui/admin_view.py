@@ -11,7 +11,7 @@ from utils.alerts import check_and_alert_health
 from utils.model_evaluation import get_horizon_metrics, get_performance_over_time
 
 
-def safe_display_df(df: pd.DataFrame, limit: int = 500) -> None:
+def safe_display_df(df: pd.DataFrame, limit: int = 5) -> None:
     """Converts datetime columns to string and displays dataframe in Streamlit.
 
     Prevents PyArrow/Streamlit crashes associated with specific timezones (e.g.,

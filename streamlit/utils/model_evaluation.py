@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -163,5 +165,7 @@ def get_performance_over_time(
                         "Count": len(group),
                     }
                 )
+        if len(results) == 0:
+            return pd.DataFrame()
 
     return pd.DataFrame(results).sort_values("prediction_generated_at")
