@@ -219,3 +219,32 @@ def render_user_dashboard(
     st.info(
         f"ℹ️ Guidelines based on European Environment Agency (EEA) standards for {selected_label}."
     )
+    ### test
+    import socket
+
+    import streamlit as st
+
+    def test_smtp_connection():
+        st.subheader("🕵️ Network Connectivity Test")
+
+        # Google's SMTP Server
+        host = "smtp.gmail.com"
+        ports = [465, 587]  # Test both SSL (465) and STARTTLS (587)
+
+        for port in ports:
+            st.write(f"Testing connection to **{host}:{port}**...")
+            try:
+                # specific timeout of 5 seconds
+                s = socket.create_connection((host, port), timeout=5)
+                s.close()
+                st.success(f"✅ Port {port} is OPEN. Connection successful.")
+            except socket.timeout:
+                st.error(f"❌ Port {port} TIMED OUT. (Firewall blocked)")
+            except ConnectionRefusedError:
+                st.error(f"❌ Port {port} REFUSED. (Server blocked IP)")
+            except Exception as e:
+                st.error(f"❌ Port {port} FAILED with error: {e}")
+
+    # Call this function in your main app execution
+    if st.button("Run Network Diagnostics"):
+        test_smtp_connection()
