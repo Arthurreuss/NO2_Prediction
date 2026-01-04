@@ -49,7 +49,7 @@ jobs:
           DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
           
           jq -n \
-            --arg last_run "$(TZ='Europe/Amsterdam' date +'%Y-%m-%d %H:%M:%S %Z')" \
+            --arg last_run "$(TZ='Europe/Amsterdam' date +'%Y-%m-%d %H:%M:%S')" \
             --arg duration "$DURATION" \
             --arg status "success" \
             --arg runner "$RUNNER_OS" \
