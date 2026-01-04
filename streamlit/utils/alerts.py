@@ -1,22 +1,23 @@
-import datetime
 import json
 import os
 import smtplib
 from email.message import EmailMessage
 
-import dateutil.parser
 import pandas as pd
 import psutil
 
 import streamlit as st
 
 
-def send_alert_email(subject: str, body: str) -> None:
+def send_alert_email(subject: str, body: str) -> bool:
     """Sends an email alert using SMTP credentials from environment variables.
 
     Args:
         subject: The subject line of the email.
         body: The plain text body content of the email.
+
+    Returns:
+        True if the email was sent successfully, False otherwise.
     """
     user = os.environ.get("EMAIL_USER")
     password = os.environ.get("EMAIL_PASSWORD")
@@ -39,8 +40,10 @@ def send_alert_email(subject: str, body: str) -> None:
             server.login(user, password)
             server.send_message(msg)
         print("Alert email sent successfully.")
+        return True
     except Exception as e:
         print(f"Failed to send alert email: {e}")
+        return False
 
 
 def check_and_alert_health(
@@ -66,6 +69,8 @@ def check_and_alert_health(
                 st.info("No active cooldown found.")
 
     issues = []
+
+    issues.append("TEST: This is a forced test alert.")
 
     mem = psutil.virtual_memory()
     if mem.percent > 90:
