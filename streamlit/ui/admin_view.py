@@ -136,16 +136,14 @@ def show_system_and_pipeline_stats(sys_stats_path: str) -> None:
             curr_ram = mem_info.rss / 1024 / 1024
             sys_mem = psutil.virtual_memory()
 
-            current_script_dir = os.path.dirname(os.path.abspath(__file__))
-            project_root = os.path.abspath(os.path.join(current_script_dir, ".."))
-
+            project_root = os.getcwd()
             repo_size_mb = get_dir_size_mb(project_root)
             repo_size_gb = repo_size_mb / 1024
             hf_limit_gb = 50.0
 
             c1, c2, c3 = st.columns(3)
             c1.metric("RAM Usage", f"{sys_mem.percent}%", f"{int(curr_ram)} MB (App)")
-            c2.metric("CPU Usage", f"{psutil.cpu_percent()}%")
+            c2.metric("CPU Usage", f"{psutil.cpu_percent(interval=0.1)}%")
             c3.metric(
                 "Disk Usage",
                 f"{repo_size_mb:.0f} MB",

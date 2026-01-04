@@ -40,29 +40,29 @@ jobs:
           END_TIME=$(date +%s)
           DURATION=$((END_TIME - START_TIME))
           
-          MEMORY_INFO=$(free -h)
-          DISK_INFO=$(df -h)
-          
-          mkdir -p data/deployment
-
+          # Calculate clean stats
           MEM_AVAILABLE=$(free -h | grep Mem | awk '{print $7}')
           DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
           
+          mkdir -p data/deployment
+          
+          # FIX: Pass the clean variables (MEM_AVAILABLE, DISK_FREE) 
+          # instead of the raw ones (MEMORY_INFO, DISK_INFO)
           jq -n \
             --arg last_run "$(TZ='Europe/Amsterdam' date +'%Y-%m-%d %H:%M:%S')" \
             --arg duration "$DURATION" \
             --arg status "success" \
             --arg runner "$RUNNER_OS" \
-            --arg memory "$MEMORY_INFO" \
-            --arg disk "$DISK_INFO" \
+            --arg mem_avail "$MEM_AVAILABLE" \
+            --arg disk_free "$DISK_FREE" \
             '{
               last_run: $last_run, 
               duration_seconds: ($duration|tonumber), 
               status: $status, 
               runner_os: $runner,
               system_metrics: {
-                memory: $memory,
-                disk: $disk
+                memory_available: $mem_avail,
+                disk_free: $disk_free
               }
             }' > data/deployment/latest_run.json
           
