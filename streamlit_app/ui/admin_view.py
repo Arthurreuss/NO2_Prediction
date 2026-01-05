@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import psutil
 
-import streamlit as st
+import streamlit_app as st
 from utils.alerts import check_and_alert_health
 from utils.model_evaluation import get_horizon_metrics, get_performance_over_time
 

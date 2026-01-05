@@ -5,7 +5,7 @@ import pandas as pd
 import psutil
 import requests
 
-import streamlit as st
+import streamlit_app as st
 
 
 def send_discord_alert(subject: str, body: str) -> bool:
