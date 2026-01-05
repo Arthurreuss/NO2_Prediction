@@ -68,6 +68,10 @@ jobs:
           
           cat data/deployment/latest_run.json
 
+      - name: Calculate Dashboard Metrics (RAM Heavy Task)
+        run: |
+          uv run python deployment/compute_metrics.py
+
       - name: Safe Commit and Push to GitHub
         run: |
           git config --global user.name 'GitHub Action'

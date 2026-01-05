@@ -49,8 +49,10 @@ with st.sidebar:
                 st.rerun()
 
 try:
-    df_history, preds, preds_all = load_data(
-        cfg["deployment"]["history_path"], cfg["deployment"]["predictions_dir"]
+    df_history, preds, _ = load_data(
+        cfg["deployment"]["history_path"],
+        cfg["deployment"]["predictions_dir"],
+        load_full_history=False,
     )
 except Exception as e:
     st.error(f"Error loading data: {e}")
@@ -71,6 +73,6 @@ if page == "Public Dashboard":
 elif page == "Admin Panel":
 
     if st.session_state["logged_in"]:
-        render_admin_dashboard(df_history, preds, preds_all, cfg)
+        render_admin_dashboard(df_history, preds, cfg)
     else:
         st.info("Please log in from the sidebar using 'admin' / 'admin'.")

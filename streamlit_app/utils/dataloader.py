@@ -7,7 +7,7 @@ import streamlit as st
 
 @st.cache_data(ttl=3600, max_entries=1)
 def load_data(
-    history_path: str, predictions_dir: str
+    history_path: str, predictions_dir: str, load_full_history: bool = False
 ) -> tuple[pd.DataFrame, dict, dict]:
     """Loads and preprocesses historical and prediction data from disk.
 
@@ -20,6 +20,7 @@ def load_data(
         history_path: File path to the historical data Parquet file.
         predictions_dir: Directory path containing prediction Parquet files
             (matching the pattern *_predictions.parquet).
+        load_full_history: If True, loads and returns the full prediction history.
 
     Returns:
         A tuple containing three elements:
@@ -62,7 +63,8 @@ def load_data(
                 by=["prediction_generated_at", "time"], ascending=[True, True]
             )
 
-            preds_all[model_name] = df.copy()
+            if load_full_history:
+                preds_all[model_name] = df.copy()
             df_stitched = df.drop_duplicates(subset=["time"], keep="last")
             preds[model_name] = df_stitched.sort_values("time")
 
