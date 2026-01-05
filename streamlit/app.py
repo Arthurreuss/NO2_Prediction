@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import yaml
@@ -10,9 +11,11 @@ import streamlit as st
 from utils.dataloader import load_data
 
 project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
+print(f"Project root added to sys.path: {project_root}", flush=True)
 load_dotenv()
 
-with open(str(project_root / "configs/config_deployment.yaml")) as f:
+with open(str("configs/config_deployment.yaml")) as f:
     cfg: dict = yaml.safe_load(f)
 
 st.set_page_config(page_title="Utrecht NO2 Forecasting", layout="wide")
