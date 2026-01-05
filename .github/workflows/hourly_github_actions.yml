@@ -105,5 +105,15 @@ jobs:
           HF_USERNAME: Arthurreuss  
           HF_SPACE_NAME: NO2_Prediction
         run: |
+          git lfs install
+          rm -rf .git
+          git init -b main
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          
+          git lfs track "*.parquet"
+          git add .
+          git commit -m "Deploy Snapshot $(date)"
+          
           git remote add space https://$HF_USERNAME:$HF_ACCESS_TOKEN@huggingface.co/spaces/$HF_USERNAME/$HF_SPACE_NAME
-          git push --force space dev:main
+          git push --force space main:main

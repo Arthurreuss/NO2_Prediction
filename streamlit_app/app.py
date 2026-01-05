@@ -5,36 +5,31 @@ import streamlit as st
 import yaml
 from streamlit_autorefresh import st_autorefresh
 
-# Path setup for local modules
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-from ui.admin_view import render_admin_dashboard
-from ui.user_view import render_user_dashboard
+from src.utils.cfg import load_config
+from streamlit_app.ui.admin_view import render_admin_dashboard
+from streamlit_app.ui.user_view import render_user_dashboard
+from streamlit_app.utils.alerts import check_and_alert_health
+from streamlit_app.utils.dataloader import load_data
 
-from utils.alerts import check_and_alert_health
-from utils.dataloader import load_data
-
-# Config
 st.set_page_config(page_title="Utrecht NO2 Forecast", layout="wide")
-with open("configs/config_deployment.yaml") as f:
-    cfg = yaml.safe_load(f)
+cfg = load_config("configs/config_deployment.yaml")
 
 # Auto-refresh (5 mins)
 st_autorefresh(interval=300000, key="data_refresh")
 
-# --- LOAD DATA (All at once) ---
 try:
     df_history, preds, h_metrics, p_metrics = load_data(
         cfg["deployment"]["history_path"],
         cfg["deployment"]["predictions_dir"],
-        "data/deployment/metrics",  # Ensure this matches your folder structure
+        cfg["deployment"]["metrics_dir"],
     )
 except Exception as e:
     st.error(f"Critical Data Error: {e}")
     st.stop()
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.title("Navigation")
     page = st.radio("Go to", ["Public Dashboard", "Admin Panel"])
@@ -55,12 +50,10 @@ with st.sidebar:
                 st.session_state["logged_in"] = False
                 st.rerun()
 
-# --- ROUTING ---
 st.markdown("## 🇳🇱 Utrecht Air Quality Forecast")
 
 if page == "Public Dashboard":
     render_user_dashboard(df_history, preds)
-    # Background Health Check
     check_and_alert_health(
         df_history,
         cfg["deployment"]["system_usage_path"],
@@ -69,7 +62,6 @@ if page == "Public Dashboard":
 
 elif page == "Admin Panel":
     if st.session_state.get("logged_in"):
-        # Pass all loaded data including metrics
         render_admin_dashboard(df_history, preds, h_metrics, p_metrics, cfg)
     else:
         st.info("Please log in to access Admin tools.")

@@ -1,25 +1,25 @@
 import json
 import os
+import shutil
 
 import pandas as pd
 import psutil
 import requests
 
 
-def send_discord_alert(subject: str, body: str) -> bool:
+def send_discord_alert(subject: str, body: str, color: int) -> bool:
     """Sends an alert to a Discord channel via Webhook.
 
     Args:
-        subject: The title/subject of the alert.
-        body: The detailed body content.
-
-    Returns:
-        True if the request was successful, False otherwise.
+        subject: Title of the embed.
+        body: Main text.
+        color: Decimal color code (Red=15158332, Green=3066993).
     """
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
-    webhook_url = webhook_url.replace("discord.com", "162.159.135.232")
 
-    if not webhook_url:
+    if webhook_url:
+        webhook_url = webhook_url.replace("discord.com", "162.159.135.232")
+    else:
         print("Discord Webhook URL missing. Skipping alert.", flush=True)
         return False
 
@@ -27,10 +27,11 @@ def send_discord_alert(subject: str, body: str) -> bool:
         "username": "System Health Bot",
         "embeds": [
             {
-                "title": f"🚨 {subject}",
+                "title": f"{subject}",
                 "description": body,
-                "color": 15158332,  # Red color
+                "color": color,
                 "footer": {"text": "Streamlit Dashboard Monitor"},
+                "timestamp": pd.Timestamp.now().isoformat(),
             }
         ],
     }
@@ -41,7 +42,6 @@ def send_discord_alert(subject: str, body: str) -> bool:
             webhook_url, json=payload, headers=headers, verify=False
         )
         response.raise_for_status()
-        print("Discord alert sent successfully.", flush=True)
         return True
     except Exception as e:
         print(f"Failed to send Discord alert: {e}", flush=True)
@@ -51,77 +51,112 @@ def send_discord_alert(subject: str, body: str) -> bool:
 def check_and_alert_health(
     df_history: pd.DataFrame, sys_stats_path: str, alert_file: str
 ) -> None:
-    """Checks system resources and data pipeline health, sending Discord alerts if necessary.
+    """Checks system health (aligned with Admin Dashboard metrics) and data freshness.
 
-    Monitors RAM usage, disk space, and data freshness. Enforces a cooldown period
-    to prevent spamming alerts.
-
-    Args:
-        df_history: The DataFrame containing historical data to check for emptiness.
-        sys_stats_path: Path to the JSON file containing pipeline run statistics.
-        alert_file: Path to the JSON file used to store/check alert cooldown timestamps.
+    Sends:
+    - 🔴 ERROR alert if resources critical or data stale.
+    - 🟢 SUCCESS alert if everything healthy AND new data just arrived.
     """
     issues = []
 
-    mem = psutil.virtual_memory()
-    if mem.percent > 90:
-        issues.append(f"CRITICAL: System RAM is at {mem.percent}%")
+    process = psutil.Process(os.getpid())
+    mem_used_mb = process.memory_info().rss / 1024 / 1024
 
-    disk = psutil.disk_usage(".")
-    free_gb = disk.free / (1024**3)
+    limit_mb = 16 * 1024
+    try:
+        with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
+            val = int(f.read().strip())
+            if val < 10**15:
+                limit_mb = val / 1024 / 1024
+    except:
+        pass
+
+    mem_percent = (mem_used_mb / limit_mb) * 100
+    if mem_percent > 90:
+        issues.append(
+            f"**Critical RAM:** {mem_percent:.1f}% used ({int(mem_used_mb)}/{int(limit_mb)} MB)"
+        )
+
+    total, used, free = shutil.disk_usage(".")
+    free_gb = free / (1024**3)
     if free_gb < 0.5:
-        issues.append(f"CRITICAL: Low Disk Space ({free_gb:.2f} GB remaining)")
+        issues.append(f"**Low Disk Space:** Only {free_gb:.2f} GB free")
+
+    data_is_fresh = False
+    last_run_ts = None
 
     if df_history is None or df_history.empty:
-        issues.append("CRITICAL: History DataFrame is empty/missing")
+        issues.append("**Data Missing:** History DataFrame is empty")
 
     if os.path.exists(sys_stats_path):
         try:
             with open(sys_stats_path, "r") as f:
                 stats = json.load(f)
+
+            if stats.get("status") != "success":
+                issues.append(
+                    f"**Pipeline Failure:** Last run status was '{stats.get('status')}'"
+                )
+
             last_run_str = stats.get("last_run")
             if last_run_str:
-                last_run = pd.to_datetime(last_run_str)
-                last_run = last_run.tz_convert("Europe/Amsterdam")
+                last_run_ts = pd.to_datetime(last_run_str).tz_localize(
+                    "Europe/Amsterdam"
+                )
 
                 now_ams = pd.Timestamp.now(tz="Europe/Amsterdam")
-                diff_hours = (now_ams - last_run).total_seconds() / 3600
+                age_hours = (now_ams - last_run_ts).total_seconds() / 3600
 
-                if diff_hours > 3:
+                if age_hours > 3:
                     issues.append(
-                        f"WARNING: Pipeline Stale. Last run {diff_hours:.1f} hours ago."
+                        f"**Stale Data:** Last update was {age_hours:.1f} hours ago"
                     )
-        except Exception:
+                elif age_hours < 1:
+                    data_is_fresh = True
+
+        except Exception as e:
+            issues.append(f"**Read Error:** Could not parse system stats ({str(e)})")
+    else:
+        issues.append("**Missing Stats:** 'latest_run.json' not found")
+
+    prev_state = {}
+    if os.path.exists(alert_file):
+        try:
+            with open(alert_file, "r") as f:
+                prev_state = json.load(f)
+        except:
             pass
 
     if issues:
-        should_send = True
-        cooldown_msg = ""
-        now_ams = pd.Timestamp.now(tz="Europe/Amsterdam")
+        last_error = pd.to_datetime(
+            prev_state.get("last_error_time", "2000-01-01")
+        ).tz_localize(None)
+        now_naive = pd.Timestamp.now()
 
-        if os.path.exists(alert_file):
-            try:
-                with open(alert_file, "r") as f:
-                    data = json.load(f)
-                    last_sent = pd.to_datetime(data["last_sent"])
-                    last_sent = last_sent.tz_convert("Europe/Amsterdam")
-                    seconds_since = (now_ams - last_sent).total_seconds()
+        if (now_naive - last_error).total_seconds() > 3600:
+            subject = f"🚨 Dashboard Alert: {len(issues)} Issues"
+            body = "\n".join([f"- {i}" for i in issues])
 
-                    if seconds_since < 3600:
-                        should_send = False
-                        mins_left = int((3600 - seconds_since) / 60)
-                        cooldown_msg = f" (Cooldown active: Wait {mins_left} mins)"
-            except Exception:
-                pass
+            if send_discord_alert(subject, body, color=15158332):  # Red
+                prev_state["last_error_time"] = now_naive.isoformat()
+                with open(alert_file, "w") as f:
+                    json.dump(prev_state, f)
 
-        if should_send:
-            subject = f"Dashboard Alert: {len(issues)} Issues Detected"
-            body = "**The following issues were detected:**\n" + "\n".join(
-                [f"- {i}" for i in issues]
+    elif data_is_fresh and last_run_ts:
+        last_success_ts_str = prev_state.get("last_success_ts")
+        current_run_str = last_run_ts.isoformat()
+
+        if last_success_ts_str != current_run_str:
+            subject = "✅ System Healthy & Data Updated"
+            body = (
+                f"**Pipeline:** Success\n"
+                f"**Freshness:** {last_run_ts.strftime('%H:%M %d-%m')}\n"
+                f"**RAM:** {mem_percent:.1f}%\n"
+                f"**Disk Free:** {free_gb:.1f} GB"
             )
 
-            success = send_discord_alert(subject, body)
-
-            if success:
+            if send_discord_alert(subject, body, color=3066993):
+                prev_state["last_success_ts"] = current_run_str
+                prev_state["last_error_time"] = "2000-01-01"
                 with open(alert_file, "w") as f:
-                    json.dump({"last_sent": now_ams.isoformat()}, f)
+                    json.dump(prev_state, f)

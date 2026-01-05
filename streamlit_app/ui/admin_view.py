@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 
 import pandas as pd
 import plotly.express as px
@@ -15,19 +14,17 @@ def get_dir_size(start_path="."):
     for dirpath, dirnames, filenames in os.walk(start_path):
         for f in filenames:
             fp = os.path.join(dirpath, f)
-            # skip if it is symbolic link
             if not os.path.islink(fp):
                 total_size += os.path.getsize(fp)
-    return total_size / 1024 / 1024  # Convert bytes to MB
+    return total_size / 1024 / 1024
 
 
 def show_system_stats(sys_stats_path: str):
     """Displays real-time container health and pipeline stats with CORRECT Free Tier limits."""
     with st.expander("System & Pipeline Stats", expanded=True):
 
-        # --- LEFT: Hugging Face Container (Real-Time) ---
         with st.container(border=True):
-            st.markdown("### ☁️ HF Space (Free Tier)")
+            st.markdown("### HF Space (Free Tier)")
 
             # 1. RAM: Limit is 16GB
             process = psutil.Process(os.getpid())
@@ -40,7 +37,6 @@ def show_system_stats(sys_stats_path: str):
             disk_percent = (app_size_mb / (50 * 1024)) * 100
 
             # 3. CPU: Limit is 2 vCPUs (Standard Free Tier)
-            # psutil.cpu_percent() gives us usage relative to the allocated quota in containers
             cpu_usage = psutil.cpu_percent()
 
             c1, c2, c3 = st.columns(3)
@@ -53,9 +49,8 @@ def show_system_stats(sys_stats_path: str):
             )
             c3.metric("CPU Load", f"{cpu_usage}%", f"of 2 vCPUs")
 
-        # --- RIGHT: GitHub Pipeline (Job Metrics) ---
         with st.container(border=True):
-            st.markdown("### 🚀 GitHub Action (Standard Runner)")
+            st.markdown("### GitHub Action (Standard Runner)")
 
             if os.path.exists(sys_stats_path):
                 with open(sys_stats_path, "r") as f:
@@ -66,15 +61,13 @@ def show_system_stats(sys_stats_path: str):
 
                 # 1. RAM (Standard Runner is ~7GB)
                 max_ram = peaks.get("max_ram_mb", 0)
-                gh_ram_limit = 7000  # ~7 GB
+                gh_ram_limit = 7000
                 ram_pct = (max_ram / gh_ram_limit) * 100
 
                 k1.metric("Peak RAM", f"{max_ram:.0f} MB", f"{ram_pct:.1f}% of 7 GB")
 
                 # 2. CPU (Standard Runner is 2 vCPUs)
                 avg_cpu = peaks.get("cpu_percent", 0)
-                # If avg_cpu is > 100%, it means we used >1 core.
-                # Max possible is 200% (2 cores).
                 k2.metric("Avg CPU", f"{avg_cpu}%", "of 2 vCPUs")
 
                 # 3. Data
@@ -92,7 +85,7 @@ def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, 
     show_system_stats(cfg["deployment"]["system_usage_path"])
 
     if not horizon_metrics:
-        st.error("⚠️ Metrics missing. Run backend pipeline.")
+        st.error("Metrics missing. Run backend pipeline.")
         return
 
     pollutants = {
@@ -105,12 +98,10 @@ def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, 
     for label, col in pollutants.items():
         st.markdown(f"--- \n### {label}")
 
-        # --- Horizon Analysis ---
         if col in horizon_metrics:
             tab1, tab2 = st.tabs(["RMSE (Error)", "SMAPE (%)"])
 
             with tab1:
-                # Restoration: CI Toggle
                 show_ci = st.toggle(
                     f"Show Confidence Intervals ({col})", value=False, key=f"ci_{col}"
                 )
@@ -124,7 +115,6 @@ def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, 
                     df = pd.DataFrame(data)
                     color = colors[i % len(colors)]
 
-                    # Main Line
                     fig.add_trace(
                         go.Scatter(
                             x=df["step"],
@@ -135,7 +125,6 @@ def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, 
                         )
                     )
 
-                    # Restoration: Shaded Confidence Interval
                     if show_ci and "RMSE_upper" in df.columns:
                         fig.add_trace(
                             go.Scatter(
@@ -159,7 +148,6 @@ def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, 
                 st.plotly_chart(fig, width="stretch")
 
             with tab2:
-                # SMAPE usually doesn't need CI in this context, keeping it simple
                 fig = go.Figure()
                 for m, data in horizon_metrics[col].items():
                     if data:
@@ -175,7 +163,6 @@ def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, 
                 )
                 st.plotly_chart(fig, width="stretch")
 
-        # --- Stability Over Time ---
         if col in history_metrics and history_metrics[col]:
             df_perf = pd.DataFrame(history_metrics[col])
             fig = px.line(

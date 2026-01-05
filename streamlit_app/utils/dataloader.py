@@ -14,15 +14,12 @@ def load_data(history_path: str, predictions_dir: str, metrics_dir: str) -> tupl
     2. Stitched Forecasts (Parquet -> Dict)
     3. Pre-computed Metrics (JSON -> Dict)
     """
-    # --- 1. Load History ---
     if os.path.exists(history_path):
         df_history = pd.read_parquet(history_path)
-        # Convert to UTC immediately to avoid PyArrow/Streamlit timezone issues
         df_history["time"] = pd.to_datetime(df_history["time"], utc=True)
     else:
         df_history = pd.DataFrame()
 
-    # --- 2. Load Predictions (Stitched Only) ---
     preds = {}
     pred_files = glob.glob(os.path.join(predictions_dir, "*_predictions.parquet"))
 
@@ -33,13 +30,11 @@ def load_data(history_path: str, predictions_dir: str, metrics_dir: str) -> tupl
         try:
             df = pd.read_parquet(f)
 
-            # Standardize Timestamps
             for col in ["time", "prediction_generated_at"]:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], utc=True)
 
             if not df.empty:
-                # Stitching: Sort by generation time, keep last (newest) for each target time
                 df = df.sort_values("prediction_generated_at")
                 df_stitched = df.drop_duplicates(
                     subset=["time"], keep="last"
@@ -49,7 +44,6 @@ def load_data(history_path: str, predictions_dir: str, metrics_dir: str) -> tupl
         except Exception as e:
             print(f"Error loading {model_name}: {e}")
 
-    # --- 3. Load Metrics (JSON) ---
     horizon_metrics = {}
     history_metrics = {}
 

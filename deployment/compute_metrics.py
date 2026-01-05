@@ -1,36 +1,30 @@
 import glob
 import json
 import os
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-# Configuration
-HISTORY_PATH = "data/deployment/processed/continuous_history.parquet"
-PREDS_DIR = "data/deployment/predictions"
-METRICS_DIR = "data/deployment/metrics"
-POLLUTANTS = ["nitrogen_dioxide", "ozone", "pm10", "pm2_5"]
+from src.utils.cfg import load_config
 
 
-def load_data():
+def load_data(cfg):
     """Loads history and all raw predictions."""
-    if not os.path.exists(HISTORY_PATH):
-        raise FileNotFoundError(f"History not found: {HISTORY_PATH}")
+    history_path = cfg["deployment"]["history_path"]
+    preds_dir = cfg["deployment"]["predictions_dir"]
+    if not os.path.exists(history_path):
+        raise FileNotFoundError(f"History not found: {history_path}")
 
-    # Load History
-    df_hist = pd.read_parquet(HISTORY_PATH)
+    df_hist = pd.read_parquet(history_path)
     df_hist["time"] = pd.to_datetime(df_hist["time"], utc=True)
 
-    # Load Predictions
     preds_all = {}
-    for f in glob.glob(os.path.join(PREDS_DIR, "*_predictions.parquet")):
+    for f in glob.glob(os.path.join(preds_dir, "*_predictions.parquet")):
         model = (
             os.path.basename(f).replace("_predictions.parquet", "").replace("_", " ")
         )
         try:
             df = pd.read_parquet(f)
-            # Standardize Time
             for col in ["time", "prediction_generated_at"]:
                 if col in df.columns:
                     df[col] = pd.to_datetime(df[col], utc=True)
@@ -49,38 +43,30 @@ def calculate_smape(y_true, y_pred):
     return np.where(denominator == 0, 0.0, 100 * diff)
 
 
-def process_metrics(df_hist, preds_all):
-    horizon_out = {p: {} for p in POLLUTANTS}
-    history_out = {p: [] for p in POLLUTANTS}
+def process_metrics(df_hist, preds_all, cfg):
+    pollutants = cfg["data"]["target_cols"]
+    horizon_out = {p: {} for p in pollutants}
+    history_out = {p: [] for p in pollutants}
 
-    for pollutant in POLLUTANTS:
+    for pollutant in pollutants:
         print(f"Processing {pollutant}...")
 
         for model_name, df_pred in preds_all.items():
-            # Skip GRU for non-NO2 (Business Logic)
             if pollutant != "nitrogen_dioxide" and model_name == "GRU":
                 continue
 
-            # Check if model actually predicts this pollutant
-            if pollutant not in df_pred.columns:
-                continue
-
-            # --- FIX: Rename history column BEFORE merge to avoid name collision ---
             hist_slice = df_hist[["time", pollutant]].rename(
                 columns={pollutant: "actual"}
             )
 
-            # Merge: df_pred keeps '{pollutant}', hist_slice provides 'actual'
             merged = pd.merge(df_pred, hist_slice, on="time", how="inner")
 
             if merged.empty:
                 continue
 
-            # Calc Errors (Prediction column is just 'pollutant' e.g. 'nitrogen_dioxide')
             merged["sq_error"] = (merged[pollutant] - merged["actual"]) ** 2
             merged["smape"] = calculate_smape(merged["actual"], merged[pollutant])
 
-            # --- 1. Horizon Metrics (Aggregated by step 1-72) ---
             merged["step"] = (
                 (
                     (
@@ -102,7 +88,6 @@ def process_metrics(df_hist, preds_all):
                 .reset_index()
             )
 
-            # Calc RMSE stats
             stats["RMSE_mean"] = np.sqrt(stats["MSE_mean"])
             stats["RMSE_upper"] = np.sqrt(
                 stats["MSE_mean"] + stats["MSE_std"].fillna(0)
@@ -111,13 +96,10 @@ def process_metrics(df_hist, preds_all):
                 (stats["MSE_mean"] - stats["MSE_std"].fillna(0)).clip(lower=0)
             )
 
-            # Clean for JSON (Fill NaNs)
             horizon_out[pollutant][model_name] = stats.where(
                 pd.notnull(stats), None
             ).to_dict(orient="records")
 
-            # --- 2. History Metrics (Aggregated by generation time) ---
-            # Filter for complete forecasts (72 hours)
             valid_runs = merged.groupby("prediction_generated_at").filter(
                 lambda x: len(x) == 72
             )
@@ -134,13 +116,11 @@ def process_metrics(df_hist, preds_all):
                 )
 
                 perf["Model"] = model_name
-                # Convert timestamp to string for JSON
                 perf["prediction_generated_at"] = perf[
                     "prediction_generated_at"
                 ].astype(str)
                 history_out[pollutant].extend(perf.to_dict(orient="records"))
 
-        # Sort history by time after combining models
         if history_out[pollutant]:
             history_out[pollutant].sort(key=lambda x: x["prediction_generated_at"])
 
@@ -148,8 +128,11 @@ def process_metrics(df_hist, preds_all):
 
 
 def main():
-    print("🚀 Starting Metrics Computation...")
-    os.makedirs(METRICS_DIR, exist_ok=True)
+    cfg = load_config("configs/config_deployment.yaml")
+    metrics_dir = cfg["deployment"]["metrics_dir"]
+
+    print("Starting Metrics Computation...")
+    os.makedirs(metrics_dir, exist_ok=True)
 
     try:
         df_history, preds_all = load_data()
@@ -157,16 +140,16 @@ def main():
         print("⚠️ History file missing.")
         return
 
-    horizon_metrics, history_metrics = process_metrics(df_history, preds_all)
+    horizon_metrics, history_metrics = process_metrics(df_history, preds_all, cfg)
 
-    print("💾 Saving metrics...")
-    with open(f"{METRICS_DIR}/horizon_metrics.json", "w") as f:
+    print("Saving metrics...")
+    with open(f"{metrics_dir}/horizon_metrics.json", "w") as f:
         json.dump(horizon_metrics, f)
 
-    with open(f"{METRICS_DIR}/history_metrics.json", "w") as f:
+    with open(f"{metrics_dir}/history_metrics.json", "w") as f:
         json.dump(history_metrics, f)
 
-    print("✅ Done.")
+    print("Done.")
 
 
 if __name__ == "__main__":

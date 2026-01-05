@@ -8,7 +8,6 @@ from utils.styling import get_aqi_category, get_aqi_thresholds
 def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFrame]):
     col_sel, col_mod = st.columns([1, 2])
 
-    # 1. Selectors
     map_pol = {
         "Nitrogen Dioxide (NO₂)": "nitrogen_dioxide",
         "Ozone (O₃)": "ozone",
@@ -22,7 +21,6 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
         "Models", list(preds.keys()), default=list(preds.keys())
     )
 
-    # 2. Current Status Card
     if not df_history.empty:
         valid_hist = df_history.dropna(subset=[col_name])
         if not valid_hist.empty:
@@ -41,13 +39,11 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
                 unsafe_allow_html=True,
             )
 
-    # 3. Setup Plot
     fig = go.Figure()
     current_time = pd.Timestamp.now(tz="UTC")
     cutoff_date = current_time - pd.Timedelta(days=7)
     max_y_val = 0
 
-    # A. Plot History
     if not df_history.empty:
         hist_plot = df_history[df_history["time"] > cutoff_date].copy()
         if not hist_plot.empty and col_name in hist_plot.columns:
@@ -65,7 +61,6 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
                     )
                 )
 
-    # B. Plot Models
     colors = ["#00CC96", "#AB63FA", "#FFA15A", "#19D3F3", "#FF6692"]
     for i, model_name in enumerate(models):
         df_p = preds.get(model_name)
@@ -86,11 +81,9 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
                 )
             )
 
-    # C. Draw AQI Background Bands
     th = get_aqi_thresholds(col_name)
     bg_colors = ["#50F0E6", "#50CCAA", "#F0E641", "#FF5050", "#960032", "#7D2181"]
 
-    # Calculate sensible Y-axis max
     final_top_limit = max(max_y_val * 1.1, th[2])
 
     prev = 0
@@ -115,8 +108,6 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
             line_width=0,
         )
 
-    # D. Restore AQI Legend (Dummy Traces)
-    # We add invisible points just to get the squares in the legend
     aqi_labels = [
         (f"Good (<{th[0]})", bg_colors[0]),
         (f"Fair ({th[0]}-{th[1]})", bg_colors[1]),
@@ -139,7 +130,6 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
             )
         )
 
-    # E. Final Layout
     fig.add_vline(
         x=current_time.timestamp() * 1000,
         line_dash="dot",
@@ -159,7 +149,16 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
             range=[current_time, current_time + pd.Timedelta(hours=48)],
         ),
         margin=dict(l=20, r=20, t=40, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.99,
+            xanchor="right",
+            x=0.99,
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="rgba(0,0,0,0.1)",
+            borderwidth=1,
+        ),
         hovermode="x unified",
     )
 
