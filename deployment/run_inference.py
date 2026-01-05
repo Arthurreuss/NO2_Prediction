@@ -72,10 +72,19 @@ class DeploymentPipeline:
 
         Updates `self.cfg["api_requests"]["time"]` with `start_date` and `end_date`
         formatted as YYYY-MM-DD.
+
+        Note:
+            Handles the midnight edge case: If the current time is between 00:00
+            and 01:00, `end_date` is set to yesterday to avoid requesting future
+            data from the Archive API. Otherwise, it defaults to today.
         """
         today = pd.Timestamp.now(tz="Europe/Amsterdam")
         start_dt = today - timedelta(days=8)
-        end_dt = today
+
+        if today.hour == 0:
+            end_dt = today - timedelta(days=1)
+        else:
+            end_dt = today
 
         self.cfg["api_requests"].setdefault("time", {})
         self.cfg["api_requests"]["time"].update(
