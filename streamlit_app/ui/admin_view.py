@@ -22,20 +22,20 @@ def get_dir_size(start_path="."):
 
 
 def show_system_stats(sys_stats_path: str):
-    """Displays real-time container health and latest pipeline status."""
+    """Displays real-time container health and pipeline stats."""
     with st.expander("System & Pipeline Stats", expanded=True):
 
         # --- LEFT: Real-Time Hugging Face Container ---
         with st.container(border=True):
             st.markdown("### ☁️ HF Container (Real-Time)")
 
-            # 1. RAM (Current Process vs 16GB Limit)
+            # 1. RAM
             process = psutil.Process(os.getpid())
             mem_used_mb = process.memory_info().rss / 1024 / 1024
 
-            limit_mb = 16 * 1024  # Default HF Limit
+            # Detect Container Limit or default to 16GB
+            limit_mb = 16 * 1024
             try:
-                # Try to read real container limit
                 with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
                     val = int(f.read().strip())
                     if val < 10**15:
@@ -45,12 +45,13 @@ def show_system_stats(sys_stats_path: str):
 
             ram_percent = (mem_used_mb / limit_mb) * 100
 
-            # 2. DISK: Actual App Size (Recursive) vs 50GB Limit
+            # 2. Disk
             app_size_mb = get_dir_size(".")
-            hf_disk_limit_mb = (
-                50 * 1024
-            )  # HF Free Tier usually offers ~50GB persistent storage
-            disk_percent = (app_size_mb / hf_disk_limit_mb) * 100
+            disk_percent = (app_size_mb / (50 * 1024)) * 100
+
+            # 3. CPU
+            cpu_usage = psutil.cpu_percent()
+            cpu_count = psutil.cpu_count()
 
             c1, c2, c3 = st.columns(3)
 
@@ -59,19 +60,14 @@ def show_system_stats(sys_stats_path: str):
                 f"{int(mem_used_mb)} MB",
                 f"{ram_percent:.1f}% of {int(limit_mb/1024)}GB",
             )
-
             c2.metric(
-                "App Disk Storage",
-                f"{app_size_mb:.0f} MB",
-                f"{disk_percent:.2f}% of 50GB Limit",
-                delta_color="normal" if disk_percent < 80 else "inverse",
+                "App Storage", f"{app_size_mb:.0f} MB", f"{disk_percent:.1f}% of 50GB"
             )
+            c3.metric("CPU Load", f"{cpu_usage}%", f"of {cpu_count} vCPUs")
 
-            c3.metric("CPU Load", f"{psutil.cpu_percent()}%", "Instant")
-
-        # --- RIGHT: GitHub Pipeline Peak Stats ---
+        # --- RIGHT: GitHub Pipeline Stats ---
         with st.container(border=True):
-            st.markdown("### 🚀 GitHub Pipeline (Peak Metrics)")
+            st.markdown("### 🚀 GitHub Pipeline (Job Metrics)")  # Changed from "Peak"
 
             if os.path.exists(sys_stats_path):
                 with open(sys_stats_path, "r") as f:
@@ -80,13 +76,25 @@ def show_system_stats(sys_stats_path: str):
 
                 k1, k2, k3 = st.columns(3)
 
-                # Metrics from the pipeline JSON
+                # 1. RAM (This IS actually Peak)
+                max_ram = peaks.get("max_ram_mb", 0)
+                total_runner_ram = peaks.get("total_ram_mb", 7000)
+                ram_pct = (max_ram / total_runner_ram) * 100
+
                 k1.metric(
-                    "Peak RAM", f"{peaks.get('max_ram_mb', 0):.0f} MB", "Pipeline Max"
+                    "Peak RAM",
+                    f"{max_ram:.0f} MB",
+                    f"{ram_pct:.1f}% of {int(total_runner_ram/1024)}GB",
                 )
-                k2.metric(
-                    "Peak CPU", f"{peaks.get('cpu_percent', 'N/A')}", "% Allocated"
-                )
+
+                # 2. CPU (This is AVERAGE / Efficiency)
+                avg_cpu_load = peaks.get("cpu_percent", "N/A")
+                runner_cpus = peaks.get("cpu_count", 2)
+
+                # RENAMED from "Peak CPU" to "Avg CPU" to be accurate
+                k2.metric("Avg CPU", f"{avg_cpu_load}", f"of {runner_cpus} vCPUs")
+
+                # 3. Data
                 k3.metric("New Data", f"{peaks.get('data_size_mb', 0)} MB", "Generated")
 
                 st.caption(
