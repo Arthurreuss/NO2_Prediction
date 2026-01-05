@@ -18,7 +18,6 @@ def send_discord_alert(subject: str, body: str) -> bool:
         True if the request was successful, False otherwise.
     """
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
-    webhook_url = webhook_url.replace("discord.com", "162.159.135.232")
 
     if not webhook_url:
         print("Discord Webhook URL missing. Skipping alert.", flush=True)
@@ -30,17 +29,14 @@ def send_discord_alert(subject: str, body: str) -> bool:
             {
                 "title": f"🚨 {subject}",
                 "description": body,
-                "color": 15158332,  # Red color
+                "color": 15158332,
                 "footer": {"text": "Streamlit Dashboard Monitor"},
             }
         ],
     }
 
     try:
-        headers = {"Host": "discord.com"}
-        response = requests.post(
-            webhook_url, json=payload, headers=headers, verify=False
-        )
+        response = requests.post(webhook_url, json=payload, verify=False)
         response.raise_for_status()
         print("Discord alert sent successfully.", flush=True)
         return True

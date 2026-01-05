@@ -147,41 +147,46 @@ def render_user_dashboard(
     th = get_aqi_thresholds(target_col)
     OPACITY = 0.15
 
+    colors_aqi = [
+        "#50F0E6",  # Good (Turquoise)
+        "#50CCAA",  # Fair (Greenish Teal)
+        "#F0E641",  # Moderate (Yellow)
+        "#FF5050",  # Poor (Red)
+        "#960032",  # Very poor (Dark Red)
+        "#7D2181",  # Extremely poor (Purple)
+    ]
+
+    previous_th = 0
+    for i in range(5):
+        fig.add_hrect(
+            y0=previous_th,
+            y1=th[i],
+            fillcolor=colors_aqi[i],
+            opacity=OPACITY,
+            line_width=0,
+            layer="below",
+        )
+        previous_th = th[i]
+
     fig.add_hrect(
-        y0=0, y1=th[0], fillcolor="green", opacity=OPACITY, line_width=0, layer="below"
-    )
-    fig.add_hrect(
-        y0=th[0],
-        y1=th[1],
-        fillcolor="yellow",
-        opacity=OPACITY,
-        line_width=0,
-        layer="below",
-    )
-    fig.add_hrect(
-        y0=th[1],
-        y1=th[2],
-        fillcolor="orange",
-        opacity=OPACITY,
-        line_width=0,
-        layer="below",
-    )
-    fig.add_hrect(
-        y0=th[2],
-        y1=th[3],
-        fillcolor="red",
+        y0=th[4],
+        y1=th[4] * 5,
+        fillcolor=colors_aqi[5],
         opacity=OPACITY,
         line_width=0,
         layer="below",
     )
 
-    aqi_legend = [
-        (f"Good (<{th[0]})", "green"),
-        (f"Fair ({th[0]}-{th[1]})", "#FFD700"),
-        (f"Moderate ({th[1]}-{th[2]})", "orange"),
-        (f"Poor (>{th[2]})", "red"),
+    aqi_legend_items = [
+        (f"Good (<{th[0]})", colors_aqi[0]),
+        (f"Fair ({th[0]}-{th[1]})", colors_aqi[1]),
+        (f"Moderate ({th[1]}-{th[2]})", colors_aqi[2]),
+        (f"Poor ({th[2]}-{th[3]})", colors_aqi[3]),
+        (f"Very Poor ({th[3]}-{th[4]})", colors_aqi[4]),
+        (f"Extremely Poor (>{th[4]})", colors_aqi[5]),
     ]
-    for label, color in aqi_legend:
+
+    for label, color in aqi_legend_items:
         fig.add_trace(
             go.Scatter(
                 x=[None],
@@ -195,7 +200,7 @@ def render_user_dashboard(
         )
 
     calculated_top = max_data_value * 1.1
-    minimum_view = th[0] * 1.2
+    minimum_view = th[2]
     final_top_limit = max(calculated_top, minimum_view)
 
     zoom_start = current_time
