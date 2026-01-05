@@ -7,7 +7,6 @@ import plotly.graph_objects as go
 import psutil
 import streamlit as st
 
-from utils.alerts import check_and_alert_health
 from utils.model_evaluation import get_horizon_metrics, get_performance_over_time
 
 
@@ -207,10 +206,8 @@ def render_admin_dashboard(
         cfg: Configuration dictionary containing deployment paths and settings.
     """
     sys_stats_path = cfg["deployment"]["system_usage_path"]
-    alert_file_path = cfg["deployment"]["alert_file"]
-    st.title("Admin Dashboard")
 
-    check_and_alert_health(df_history, sys_stats_path, alert_file_path)
+    st.title("Admin Dashboard")
 
     show_system_and_pipeline_stats(sys_stats_path)
 

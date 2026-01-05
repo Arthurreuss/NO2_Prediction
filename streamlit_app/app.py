@@ -8,6 +8,7 @@ from streamlit_autorefresh import st_autorefresh
 from ui.admin_view import render_admin_dashboard
 from ui.user_view import render_user_dashboard
 
+from utils.alerts import check_and_alert_health
 from utils.dataloader import load_data
 
 project_root = Path(__file__).parent.parent
@@ -65,6 +66,10 @@ if page == "Public Dashboard":
         render_user_dashboard(df_history, preds)
 
 elif page == "Admin Panel":
+    sys_stats_path = cfg["deployment"]["system_usage_path"]
+    alert_file_path = cfg["deployment"]["alert_file"]
+    check_and_alert_health(df_history, sys_stats_path, alert_file_path)
+
     if st.session_state["logged_in"]:
         render_admin_dashboard(df_history, preds, preds_all, cfg)
     else:
