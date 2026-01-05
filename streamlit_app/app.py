@@ -12,7 +12,6 @@ from utils.dataloader import load_data
 
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
-print(f"Project root added to sys.path: {project_root}", flush=True)
 load_dotenv()
 
 with open(str("configs/config_deployment.yaml")) as f:
