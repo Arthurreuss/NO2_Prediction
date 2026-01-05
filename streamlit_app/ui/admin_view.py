@@ -85,7 +85,7 @@ def show_system_stats(sys_stats_path: str) -> None:
 
                 # 2. CPU (Standard Runner is 2 vCPUs)
                 avg_cpu = peaks.get("cpu_percent", 0)
-                k2.metric("Avg CPU", f"{avg_cpu}%", "of 2 vCPUs")
+                k2.metric("Avg CPU", f"{avg_cpu}", "of 2 vCPUs")
 
                 # 3. Data
                 k3.metric("New Data", f"{peaks.get('data_size_mb', 0)} MB", "Generated")

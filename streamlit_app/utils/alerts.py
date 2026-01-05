@@ -1,11 +1,11 @@
 import json
 import os
-import shutil
 from typing import Any, Dict, Optional
 
 import pandas as pd
 import psutil
 import requests
+from ui.admin_view import get_dir_size
 
 
 def send_discord_alert(subject: str, body: str, color: int) -> bool:
@@ -97,10 +97,16 @@ def check_and_alert_health(
             f"**Critical RAM:** {mem_percent:.1f}% used ({int(mem_used_mb)}/{int(limit_mb)} MB)"
         )
 
-    total, used, free = shutil.disk_usage(".")
-    free_gb = free / (1024**3)
-    if free_gb < 0.5:
-        issues.append(f"**Low Disk Space:** Only {free_gb:.2f} GB free")
+    app_size_bytes = get_dir_size(".")
+    app_size_gb = app_size_bytes / (1024**3)
+
+    hf_quota_gb = 50.0
+    effective_free_gb = hf_quota_gb - app_size_gb
+
+    if effective_free_gb < 0.5:
+        issues.append(
+            f"**Low Disk Space:** Only {effective_free_gb:.2f} GB remaining of {hf_quota_gb} GB quota"
+        )
 
     data_is_fresh = False
     last_run_ts: Optional[pd.Timestamp] = None
@@ -172,7 +178,7 @@ def check_and_alert_health(
                 f"**Pipeline:** Success\n"
                 f"**Freshness:** {last_run_ts.strftime('%H:%M %d-%m')}\n"
                 f"**RAM:** {mem_percent:.1f}%\n"
-                f"**Disk Free:** {free_gb:.1f} GB"
+                f"**Disk Usage:** {app_size_gb:.1f}/{hf_quota_gb} GB ({effective_free_gb:.1f} GB Free)"
             )
 
             if send_discord_alert(subject, body, color=3066993):
