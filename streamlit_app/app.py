@@ -60,15 +60,15 @@ except Exception as e:
 st.markdown("## 🇳🇱 Utrecht NO₂ Air Quality Forecast")
 
 if page == "Public Dashboard":
+    sys_stats_path = cfg["deployment"]["system_usage_path"]
+    alert_file_path = cfg["deployment"]["alert_file"]
     if df_history.empty and not preds:
         st.warning("No data available to display.")
     else:
         render_user_dashboard(df_history, preds)
+        check_and_alert_health(df_history, sys_stats_path, alert_file_path)
 
 elif page == "Admin Panel":
-    sys_stats_path = cfg["deployment"]["system_usage_path"]
-    alert_file_path = cfg["deployment"]["alert_file"]
-    check_and_alert_health(df_history, sys_stats_path, alert_file_path)
 
     if st.session_state["logged_in"]:
         render_admin_dashboard(df_history, preds, preds_all, cfg)

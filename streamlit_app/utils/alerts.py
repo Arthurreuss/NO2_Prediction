@@ -115,10 +115,6 @@ def check_and_alert_health(
             except Exception:
                 pass
 
-        st.error(f"Active System Alerts {cooldown_msg}")
-        for issue in issues:
-            st.write(f"- {issue}")
-
         if should_send:
             subject = f"Dashboard Alert: {len(issues)} Issues Detected"
             body = "**The following issues were detected:**\n" + "\n".join(
@@ -130,11 +126,3 @@ def check_and_alert_health(
             if success:
                 with open(alert_file, "w") as f:
                     json.dump({"last_sent": now_ams.isoformat()}, f)
-                st.toast("Discord notification sent to admin!")
-            else:
-                st.error("Failed to send Discord notification.")
-        elif not should_send:
-            st.caption("ℹ️ Notification suppressed by cooldown.")
-
-    else:
-        st.success("System Status: Healthy")
