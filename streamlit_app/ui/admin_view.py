@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 
 import pandas as pd
 import plotly.express as px
@@ -124,33 +125,61 @@ def show_system_and_pipeline_stats(sys_stats_path: str) -> None:
         sys_stats_path (str): The file path to the JSON file containing statistics
             from the latest GitHub Actions run.
     """
-    with st.expander("System & Pipeline Stats", expanded=False):
-        with st.container(border=True):
-            st.markdown("Hugging Face Space Status")
+    with st.expander("System & Pipeline Stats", expanded=True):
 
+        # --- TEIL 1: Hugging Face Container Status (Real Data) ---
+        with st.container(border=True):
+            st.markdown("### ☁️ Hugging Face Container Health")
+
+            # A. RAM: Wir messen nur DEINEN Prozess, nicht den ganzen Server
             process = psutil.Process(os.getpid())
             mem_info = process.memory_info()
-            curr_ram = mem_info.rss / 1024 / 1024
-            sys_mem = psutil.virtual_memory()
+            app_ram_mb = mem_info.rss / 1024 / 1024
 
-            project_root = os.getcwd()
-            repo_size_mb = get_dir_size_mb(project_root)
-            repo_size_gb = repo_size_mb / 1024
-            hf_limit_gb = 50.0
+            # Hugging Face Free Tier hat in der Regel 16 GB (= 16384 MB)
+            # Wir nutzen das als Basis für die Prozentanzeige
+            HF_RAM_LIMIT_MB = 16 * 1024
+            ram_percent = (app_ram_mb / HF_RAM_LIMIT_MB) * 100
 
+            # B. DISK: Echter Speicherplatz im Container
+            total, used, free = shutil.disk_usage(".")
+            used_gb = used / (1024**3)
+            total_gb = total / (1024**3)
+            disk_percent = (used / total) * 100
+
+            # C. CPU
+            cpu_usage = psutil.cpu_percent(interval=0.1)
+
+            # Darstellung in Spalten
             c1, c2, c3 = st.columns(3)
-            c1.metric("RAM Usage", f"{sys_mem.percent}%", f"{int(curr_ram)} MB (App)")
-            c2.metric("CPU Usage", f"{psutil.cpu_percent(interval=0.1)}%")
-            c3.metric(
-                "Disk Usage",
-                f"{repo_size_mb:.0f} MB",
-                f"{repo_size_gb:.2f} / {hf_limit_gb} GB",
+
+            c1.metric(
+                label="App RAM Usage",
+                value=f"{int(app_ram_mb)} MB",
+                delta=f"{ram_percent:.1f}% of 16GB Limit",
+                delta_color="normal" if ram_percent < 50 else "inverse",
             )
 
-            st.caption(f"Environment ID: {os.environ.get('SPACE_ID', 'Local/Unknown')}")
+            c2.metric(
+                label="Container Disk Usage",
+                value=f"{used_gb:.1f} GB",
+                delta=f"{free / (1024**3):.1f} GB free",
+                delta_color="normal" if disk_percent < 80 else "inverse",
+            )
 
+            c3.metric(
+                label="CPU Load (Instant)",
+                value=f"{cpu_usage}%",
+                help="Momentane CPU-Last. Kann auf Shared-Runnern schwanken.",
+            )
+
+            # Visualisierung als Progress Bars (für schnellen Check)
+            st.caption("RAM Usage (App vs Limit)")
+            st.progress(min(ram_percent / 100, 1.0))
+
+        # --- TEIL 2: GitHub Pipeline Status ---
         with st.container(border=True):
-            st.markdown("GitHub Actions Status")
+            st.markdown("### 🚀 GitHub Actions Pipeline (Data Update)")
 
             if os.path.exists(sys_stats_path):
                 with open(sys_stats_path, "r") as f:
@@ -158,35 +187,46 @@ def show_system_and_pipeline_stats(sys_stats_path: str) -> None:
 
                 k1, k2, k3 = st.columns(3)
 
+                # Status mit Farbe
                 status = stats.get("status", "UNKNOWN")
-                if status.lower() == "success":
-                    k1.success(f"**{status.upper()}**")
-                else:
-                    k1.error(f"**{status.upper()}**")
+                last_run_str = stats.get("last_run", "N/A")
 
-                k2.metric("Duration", f"{stats.get('duration_seconds', 0)}s")
-                k3.metric(
-                    "Last Run",
-                    stats.get("last_run", "N/A").split(" ")[1][:5] + " (CET)",
-                )
+                if status.lower() == "success":
+                    k1.success(f"Status: {status.upper()}")
+                else:
+                    k1.error(f"Status: {status.upper()}")
+
+                # Dauer
+                duration = stats.get("duration_seconds", 0)
+                k2.metric("Build Duration", f"{duration}s")
+
+                # Zeitpunkt
+                # Wir extrahieren nur die Uhrzeit für bessere Lesbarkeit
+                if " " in last_run_str:
+                    date_part, time_part = last_run_str.split(" ")
+                    display_time = f"{time_part[:5]} ({date_part})"
+                else:
+                    display_time = last_run_str
+
+                k3.metric("Last Update (CET)", display_time)
 
                 st.divider()
+                st.caption("Github Runner Telemetry")
 
-                m1, m2, m3 = st.columns(3)
                 sys_metrics = stats.get("system_metrics", {})
-
-                m1.metric("Runner OS", stats.get("runner_os", "Linux"))
-
-                mem = sys_metrics.get("memory_available", "N/A")
-                mem_disp = mem if len(mem) < 10 else "View JSON"
-                m2.metric("Runner RAM (Avail)", mem_disp)
-
-                disk = sys_metrics.get("disk_free", "N/A")
-                disk_disp = disk if len(disk) < 10 else "View JSON"
-                m3.metric("Runner Disk (Free)", disk_disp)
+                m1, m2, m3 = st.columns(3)
+                m1.markdown(f"**OS:** `{stats.get('runner_os', 'Linux')}`")
+                m2.markdown(
+                    f"**Runner RAM Avail:** `{sys_metrics.get('memory_available', 'N/A')}`"
+                )
+                m3.markdown(
+                    f"**Runner Disk Free:** `{sys_metrics.get('disk_free', 'N/A')}`"
+                )
 
             else:
-                st.warning("No pipeline statistics found yet.")
+                st.warning(
+                    "⚠️ No pipeline statistics found yet. Waiting for first run..."
+                )
 
 
 def render_admin_dashboard(df_history: pd.DataFrame, preds: dict, cfg: dict) -> None:
