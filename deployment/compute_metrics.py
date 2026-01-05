@@ -1,8 +1,14 @@
 import json
 import os
+import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+project_root = Path(__file__).parent.parent
+sys.path.append(str(project_root))
+print(f"Project root added to sys.path: {project_root}", flush=True)
 
 from streamlit_app.utils.dataloader import load_data
 from streamlit_app.utils.model_evaluation import (
