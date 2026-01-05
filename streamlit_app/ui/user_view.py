@@ -1,7 +1,7 @@
 import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 
-import streamlit_app as st
 from utils.styling import get_aqi_category, get_aqi_thresholds
 
 

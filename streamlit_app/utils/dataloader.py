@@ -2,8 +2,7 @@ import glob
 import os
 
 import pandas as pd
-
-import streamlit_app as st
+import streamlit as st
 
 
 @st.cache_data(ttl=3600)

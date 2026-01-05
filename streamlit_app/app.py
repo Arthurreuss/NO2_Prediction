@@ -1,13 +1,13 @@
 import sys
 from pathlib import Path
 
+import streamlit as st
 import yaml
 from dotenv import load_dotenv
 from streamlit_autorefresh import st_autorefresh
 from ui.admin_view import render_admin_dashboard
 from ui.user_view import render_user_dashboard
 
-import streamlit_app as st
 from utils.dataloader import load_data
 
 project_root = Path(__file__).parent.parent
