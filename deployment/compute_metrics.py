@@ -1,10 +1,14 @@
 import glob
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+
+parent_dir = Path(__file__).parent.parent
+os.sys.path.append(str(parent_dir))
 
 from src.utils.cfg import load_config
 
