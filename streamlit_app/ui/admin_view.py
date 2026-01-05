@@ -17,19 +17,12 @@ def show_system_stats(sys_stats_path: str):
         with st.container(border=True):
             st.markdown("### ☁️ Container Health")
 
-            # RAM (Current Process)
             process = psutil.Process(os.getpid())
             mem_mb = process.memory_info().rss / 1024 / 1024
-
-            # Disk Usage
             total, used, free = shutil.disk_usage(".")
 
             c1, c2, c3 = st.columns(3)
-            c1.metric(
-                "App RAM",
-                f"{int(mem_mb)} MB",
-                help="RAM used by this Streamlit process",
-            )
+            c1.metric("App RAM", f"{int(mem_mb)} MB")
             c2.metric("Disk Free", f"{free / (1024**3):.1f} GB")
             c3.metric("CPU Load", f"{psutil.cpu_percent()}%")
 
@@ -50,25 +43,19 @@ def show_system_stats(sys_stats_path: str):
                     delta_color="normal" if status == "success" else "inverse",
                 )
                 k2.metric("Duration", f"{stats.get('duration_seconds', 0)}s")
-                k3.metric(
-                    "Last Update", stats.get("last_run", "N/A").split(" ")[-1]
-                )  # Show time only
+                k3.metric("Last Update", stats.get("last_run", "N/A").split(" ")[-1])
             else:
                 st.warning("⚠️ No pipeline statistics found.")
 
 
 def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, cfg):
     st.title("Admin Dashboard")
-
-    # 1. System Stats
     show_system_stats(cfg["deployment"]["system_usage_path"])
 
-    # 2. Check Data
     if not horizon_metrics:
-        st.error("⚠️ Pre-computed metrics missing. Please run the backend pipeline.")
+        st.error("⚠️ Metrics missing. Run backend pipeline.")
         return
 
-    # 3. Visuals per Pollutant
     pollutants = {
         "NO₂": "nitrogen_dioxide",
         "O₃": "ozone",
@@ -83,34 +70,71 @@ def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, 
         if col in horizon_metrics:
             tab1, tab2 = st.tabs(["RMSE (Error)", "SMAPE (%)"])
 
-            def plot_horizon(metric_key, title):
+            with tab1:
+                # Restoration: CI Toggle
+                show_ci = st.toggle(
+                    f"Show Confidence Intervals ({col})", value=False, key=f"ci_{col}"
+                )
+
+                fig = go.Figure()
+                colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+
+                for i, (m, data) in enumerate(horizon_metrics[col].items()):
+                    if not data:
+                        continue
+                    df = pd.DataFrame(data)
+                    color = colors[i % len(colors)]
+
+                    # Main Line
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df["step"],
+                            y=df["RMSE_mean"],
+                            mode="lines",
+                            name=m,
+                            line=dict(color=color),
+                        )
+                    )
+
+                    # Restoration: Shaded Confidence Interval
+                    if show_ci and "RMSE_upper" in df.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=pd.concat([df["step"], df["step"][::-1]]),
+                                y=pd.concat([df["RMSE_upper"], df["RMSE_lower"][::-1]]),
+                                fill="toself",
+                                fillcolor=color,
+                                opacity=0.15,
+                                line=dict(color="rgba(255,255,255,0)"),
+                                hoverinfo="skip",
+                                showlegend=False,
+                            )
+                        )
+
+                fig.update_layout(
+                    title=f"RMSE vs Horizon ({label})",
+                    xaxis_title="Horizon (Hours)",
+                    height=400,
+                    hovermode="x unified",
+                )
+                st.plotly_chart(fig, width="stretch")
+
+            with tab2:
+                # SMAPE usually doesn't need CI in this context, keeping it simple
                 fig = go.Figure()
                 for m, data in horizon_metrics[col].items():
                     if data:
                         df = pd.DataFrame(data)
                         fig.add_trace(
-                            go.Scatter(
-                                x=df["step"], y=df[metric_key], mode="lines", name=m
-                            )
+                            go.Scatter(x=df["step"], y=df["SMAPE_mean"], name=m)
                         )
                 fig.update_layout(
-                    title=title,
+                    title=f"SMAPE vs Horizon ({label})",
                     xaxis_title="Horizon (Hours)",
-                    height=350,
-                    margin=dict(l=20, r=20, t=40, b=20),
+                    height=400,
+                    hovermode="x unified",
                 )
-                return fig
-
-            with tab1:
-                st.plotly_chart(
-                    plot_horizon("RMSE_mean", f"RMSE vs Horizon ({label})"),
-                    use_container_width=True,
-                )
-            with tab2:
-                st.plotly_chart(
-                    plot_horizon("SMAPE_mean", f"SMAPE vs Horizon ({label})"),
-                    use_container_width=True,
-                )
+                st.plotly_chart(fig, width="stretch")
 
         # --- Stability Over Time ---
         if col in history_metrics and history_metrics[col]:
@@ -123,15 +147,12 @@ def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, 
                 markers=True,
                 title=f"Model Stability ({label})",
             )
-            fig.update_layout(height=350)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
-    # 4. Data Inspector
     with st.expander("Inspect Raw Data"):
         st.subheader("History (Last 5)")
         st.dataframe(df_history.tail(5).astype(str))
-
-        st.subheader("Latest Forecasts (First 5)")
+        st.subheader("Latest Forecasts")
         for m, df in preds.items():
             st.write(f"**{m}**")
             st.dataframe(df.head(5).astype(str))

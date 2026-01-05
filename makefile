@@ -9,5 +9,5 @@ run-deploy:
 	uv run python -m deployment.deployment_pipeline
 
 sl:
-	uv run streamlit run streamlit/app.py
+	uv run streamlit run streamlit_app/app.py
 
