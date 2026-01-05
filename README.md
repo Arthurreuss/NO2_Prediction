@@ -48,7 +48,8 @@ This project implements an end-to-end machine learning pipeline to predict air q
 │   ├── migration/
 │   │   ├── migrate.py
 │   │   └── model_scaler_wrapper.py
-│   └── deployment_pipeline.py
+│   ├── compute_metrics.py
+│   └── run_inference.py
 ├── notebooks/            
 │   ├── data_drift.ipynb
 │   ├── feature_selection.ipynb
@@ -79,7 +80,6 @@ This project implements an end-to-end machine learning pipeline to predict air q
 ├── requirements.txt
 └── uv.lock
 ```
-
 ## How to Run Locally
 
 ### 1. Prerequisites
@@ -90,61 +90,79 @@ Ensure you have Python installed. Clone the repository and install dependencies:
 git clone https://github.com/Arthurreuss/NO2_Prediction.git
 cd NO2_Prediction
 pip install -r requirements.txt
+
 ```
 
 ### 2. Environment Setup
 
-Create a `.env` file in the root directory to store your credentials (required for MLflow/DagsHub tracking):
+Create a `.env` file in the root directory to store your credentials (only needed for deployment):
 
 ```env
 MLFLOW_TRACKING_URI=https://dagshub.com/username/repo.mlflow
 MLFLOW_TRACKING_USERNAME=your_username
 MLFLOW_TRACKING_PASSWORD=your_token
+DISCORD_WEBHOOK_URL=your_webhook_url
+HF_ACCESS_TOKEN=token
+HF_USERNAME=username
+HF_SPACE_NAME=NO2_Prediction
+
 ```
 
-### 3. Training & Optimization
+### 3. Training Pipeline
 
 Before training, run the preprocessing pipeline to clean and prepare the data:
 
 ```bash
-python -m scripts.run_preprocessing.py
+python -m scripts.run_preprocessing
+
 ```
 
-Next, you can run hyperparameter optimization (using Optuna) or train a standard model.
-
-**To run the GRU optimization or GRU:**
+Next, you can run hyperparameter optimization (using Optuna) or train a standard model:
 
 ```bash
+# Run Optimization
 python -m scripts.hp_optimization.optimize_gru
+
+# Train Model
 python -m scripts.run_model.run_gru
+
 ```
 
+### 4. Local Dashboard
 
-### 4. Run the Dashboard
-
-Launch the Streamlit app to view predictions and model performance:
+Launch the Streamlit app locally to view predictions and model performance:
 
 ```bash
-streamlit run streamlit/app.py
+streamlit run streamlit_app/app.py
+
 ```
 
-### 5. Management & Deployment Tools
+### 5. Deployment
 
-* **Model Migration:**
+Deployment consists of two stages: promoting models to the remote registry and automating inference via GitHub Actions.
+
+#### A. Model Migration
+
 Run the migration script to promote your locally trained models to the remote DagsHub registry.
+
 > **Note:** The script will only migrate models that are **registered** in your local MLflow and tagged with the **`@production`** alias.
+
 ```bash
 uv run python -m deployment.migration.migrate
-````
 
-* **MLflow UI:** To inspect registered models and experiment runs locally, use:
-```bash
-mlflow ui
 ```
 
+#### B. Automated Architecture (CI/CD)
 
+This project uses a lightweight, automated deployment strategy to minimize frontend resource usage.
 
-> **Note on Deployment:**
-> A **GitHub Actions** workflow triggers every hour. It runs the inference pipeline using only models marked with the **`@production`** alias in the DagsHub registry and pushes the updated results to **Hugging Face**, where the hosted Streamlit application displays the live results.
->
-> You can find the specific workflow configuration under **`.github/workflows`** if you are interested in how the automated inference and push to Hugging Face is implemented.
+* **Automated Inference:** A **GitHub Actions** workflow runs hourly, executing inference only on models tagged with the **`@production`** alias in the DagsHub registry.
+* **Pre-computed Metrics:** All performance metrics are calculated within the GitHub runner, ensuring the hosted application remains fast and lightweight.
+* **Live Visualization:** Updated predictions and metrics are pushed directly to **Hugging Face**, where the Streamlit app simply visualizes the data.
+
+**How to Deploy Yourself:**
+
+1. Create a **Hugging Face Space**.
+2. Update the GitHub repository secrets with your Hugging Face credentials.
+3. The workflow in `.github/workflows` will automatically handle hourly inference and data syncing.Deployment Architecture
+
