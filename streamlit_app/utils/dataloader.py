@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, max_entries=1)
 def load_data(
     history_path: str, predictions_dir: str
 ) -> tuple[pd.DataFrame, dict, dict]:
