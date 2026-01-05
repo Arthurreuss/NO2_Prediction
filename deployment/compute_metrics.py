@@ -17,7 +17,7 @@ from streamlit_app.utils.model_evaluation import (
 )
 
 # Konfiguration
-HISTORY_PATH = "data/deployment/history.parquet"
+HISTORY_PATH = "data/deployment/processed/continuous_history.parquet"
 PREDS_DIR = "data/deployment/predictions"
 METRICS_DIR = "data/deployment/metrics"
 POLLUTANTS = ["nitrogen_dioxide", "ozone", "pm10", "pm2_5"]
