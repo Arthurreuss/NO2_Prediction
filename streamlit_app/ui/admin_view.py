@@ -9,8 +9,20 @@ import psutil
 import streamlit as st
 
 
+def get_dir_size(start_path="."):
+    """Recursively calculates total size of the application directory in MB."""
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(start_path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            # skip if it is symbolic link
+            if not os.path.islink(fp):
+                total_size += os.path.getsize(fp)
+    return total_size / 1024 / 1024  # Convert bytes to MB
+
+
 def show_system_stats(sys_stats_path: str):
-    """Displays real-time container health and peak pipeline stats."""
+    """Displays real-time container health and latest pipeline status."""
     with st.expander("System & Pipeline Stats", expanded=True):
 
         # --- LEFT: Real-Time Hugging Face Container ---
@@ -21,36 +33,40 @@ def show_system_stats(sys_stats_path: str):
             process = psutil.Process(os.getpid())
             mem_used_mb = process.memory_info().rss / 1024 / 1024
 
-            # Auto-detect cgroup limit or default to 16GB
-            limit_mb = 16 * 1024
+            limit_mb = 16 * 1024  # Default HF Limit
             try:
-                for path in [
-                    "/sys/fs/cgroup/memory.max",
-                    "/sys/fs/cgroup/memory/memory.limit_in_bytes",
-                ]:
-                    if os.path.exists(path):
-                        with open(path, "r") as f:
-                            val = int(f.read().strip())
-                            if val < 10**15:
-                                limit_mb = val / 1024 / 1024
-                                break
+                # Try to read real container limit
+                with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
+                    val = int(f.read().strip())
+                    if val < 10**15:
+                        limit_mb = val / 1024 / 1024
             except:
                 pass
 
             ram_percent = (mem_used_mb / limit_mb) * 100
 
-            # 2. Disk
-            total, used, free = shutil.disk_usage(".")
-            used_gb = used / (1024**3)
-            disk_percent = (used / total) * 100
+            # 2. DISK: Actual App Size (Recursive) vs 50GB Limit
+            app_size_mb = get_dir_size(".")
+            hf_disk_limit_mb = (
+                50 * 1024
+            )  # HF Free Tier usually offers ~50GB persistent storage
+            disk_percent = (app_size_mb / hf_disk_limit_mb) * 100
 
             c1, c2, c3 = st.columns(3)
+
             c1.metric(
                 "App RAM",
                 f"{int(mem_used_mb)} MB",
                 f"{ram_percent:.1f}% of {int(limit_mb/1024)}GB",
             )
-            c2.metric("Disk Used", f"{used_gb:.1f} GB", f"{disk_percent:.1f}%")
+
+            c2.metric(
+                "App Disk Storage",
+                f"{app_size_mb:.0f} MB",
+                f"{disk_percent:.2f}% of 50GB Limit",
+                delta_color="normal" if disk_percent < 80 else "inverse",
+            )
+
             c3.metric("CPU Load", f"{psutil.cpu_percent()}%", "Instant")
 
         # --- RIGHT: GitHub Pipeline Peak Stats ---
@@ -60,29 +76,22 @@ def show_system_stats(sys_stats_path: str):
             if os.path.exists(sys_stats_path):
                 with open(sys_stats_path, "r") as f:
                     stats = json.load(f)
-
-                # Get the nested metrics safely
                 peaks = stats.get("peak_metrics", {})
 
                 k1, k2, k3 = st.columns(3)
 
-                # 1. Max RAM used during inference
-                max_ram = peaks.get("max_ram_mb", 0)
-                k1.metric("Peak RAM", f"{max_ram:.0f} MB", "Max Usage")
+                # Metrics from the pipeline JSON
+                k1.metric(
+                    "Peak RAM", f"{peaks.get('max_ram_mb', 0):.0f} MB", "Pipeline Max"
+                )
+                k2.metric(
+                    "Peak CPU", f"{peaks.get('cpu_percent', 'N/A')}", "% Allocated"
+                )
+                k3.metric("New Data", f"{peaks.get('data_size_mb', 0)} MB", "Generated")
 
-                # 2. Max CPU Load during inference
-                cpu_load = peaks.get("cpu_percent", "N/A")
-                k2.metric("Peak CPU", f"{cpu_load}", "% allocated")
-
-                # 3. Disk Space Consumed by Data Folder
-                data_size = peaks.get("data_size_mb", 0)
-                k3.metric("Data Size", f"{data_size} MB", "Generated")
-
-                # Context Info (Bottom Line)
                 st.caption(
                     f"Status: **{stats.get('status', 'UNKNOWN').upper()}** | Duration: **{stats.get('duration_seconds', 0)}s** | Updated: **{stats.get('last_run', 'N/A').split(' ')[-1]}**"
                 )
-
             else:
                 st.warning("⚠️ No pipeline statistics found.")
 
