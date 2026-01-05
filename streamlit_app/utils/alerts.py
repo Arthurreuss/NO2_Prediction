@@ -95,8 +95,6 @@ def check_and_alert_health(
         except Exception:
             pass
 
-    issues.append("TEST: This is a forced test alert to verify Discord.")
-
     if issues:
         should_send = True
         cooldown_msg = ""
