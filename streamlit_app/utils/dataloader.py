@@ -1,18 +1,29 @@
 import glob
 import json
 import os
+from typing import Any, Dict, Tuple
 
 import pandas as pd
 import streamlit as st
 
 
 @st.cache_data(ttl=3600)
-def load_data(history_path: str, predictions_dir: str, metrics_dir: str) -> tuple:
-    """
-    Loads all data required for the app:
-    1. Historical Observations (Parquet)
-    2. Stitched Forecasts (Parquet -> Dict)
-    3. Pre-computed Metrics (JSON -> Dict)
+def load_data(
+    history_path: str, predictions_dir: str, metrics_dir: str
+) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame], Dict[str, Any], Dict[str, Any]]:
+    """Loads all data required for the app, including history, forecasts, and metrics.
+
+    Args:
+        history_path (str): The file path to the historical observations Parquet file.
+        predictions_dir (str): The directory path containing prediction Parquet files.
+        metrics_dir (str): The directory path containing pre-computed metrics JSON files.
+
+    Returns:
+        Tuple[pd.DataFrame, Dict[str, pd.DataFrame], Dict[str, Any], Dict[str, Any]]: A tuple containing:
+            - df_history: DataFrame of historical observations with UTC timestamps.
+            - preds: Dictionary mapping model names to stitched forecast DataFrames.
+            - horizon_metrics: Dictionary of metrics per forecast horizon.
+            - history_metrics: Dictionary of metrics based on historical performance.
     """
     if os.path.exists(history_path):
         df_history = pd.read_parquet(history_path)

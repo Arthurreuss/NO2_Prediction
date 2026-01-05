@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any, Dict
 
 import pandas as pd
 import plotly.express as px
@@ -8,8 +9,16 @@ import psutil
 import streamlit as st
 
 
-def get_dir_size(start_path="."):
-    """Recursively calculates total size of the application directory in MB."""
+def get_dir_size(start_path: str = ".") -> float:
+    """Recursively calculates total size of the application directory in MB.
+
+    Args:
+        start_path (str): The root directory to start calculating size from.
+            Defaults to current directory.
+
+    Returns:
+        float: The total size of the directory in Megabytes (MB).
+    """
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(start_path):
         for f in filenames:
@@ -19,8 +28,16 @@ def get_dir_size(start_path="."):
     return total_size / 1024 / 1024
 
 
-def show_system_stats(sys_stats_path: str):
-    """Displays real-time container health and pipeline stats with CORRECT Free Tier limits."""
+def show_system_stats(sys_stats_path: str) -> None:
+    """Displays real-time container health and pipeline stats with Free Tier limits.
+
+    Calculates memory usage based on the current process (container) rather than
+    the total system memory, ensuring accurate monitoring for Hugging Face Spaces.
+
+    Args:
+        sys_stats_path (str): Path to the JSON file containing GitHub Action
+            pipeline statistics.
+    """
     with st.expander("System & Pipeline Stats", expanded=True):
 
         with st.container(border=True):
@@ -80,7 +97,22 @@ def show_system_stats(sys_stats_path: str):
                 st.warning("⚠️ No pipeline statistics found.")
 
 
-def render_admin_dashboard(df_history, preds, horizon_metrics, history_metrics, cfg):
+def render_admin_dashboard(
+    df_history: pd.DataFrame,
+    preds: Dict[str, pd.DataFrame],
+    horizon_metrics: Dict[str, Any],
+    history_metrics: Dict[str, Any],
+    cfg: Dict[str, Any],
+) -> None:
+    """Renders the complete Admin Dashboard, including system stats and model metrics.
+
+    Args:
+        df_history (pd.DataFrame): Historical observation data.
+        preds (Dict[str, pd.DataFrame]): Dictionary mapping model names to forecast DataFrames.
+        horizon_metrics (Dict[str, Any]): Dictionary containing RMSE/SMAPE metrics per horizon step.
+        history_metrics (Dict[str, Any]): Dictionary containing historical model performance metrics.
+        cfg (Dict[str, Any]): Configuration dictionary containing file paths and settings.
+    """
     st.title("Admin Dashboard")
     show_system_stats(cfg["deployment"]["system_usage_path"])
 

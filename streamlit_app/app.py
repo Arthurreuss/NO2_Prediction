@@ -1,11 +1,18 @@
+"""Entry point for the Utrecht NO2 Forecast Streamlit application.
+
+This script initializes the Streamlit interface, handles user authentication
+(Admin/Public), loads historical and predicted air quality data, and renders
+the appropriate dashboard views based on the user's selection.
+"""
+
 import sys
 from pathlib import Path
+from typing import Any, Dict
 
 import streamlit as st
-import yaml
 from streamlit_autorefresh import st_autorefresh
 
-project_root = Path(__file__).parent.parent
+project_root: Path = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from src.utils.cfg import load_config
@@ -15,7 +22,7 @@ from streamlit_app.utils.alerts import check_and_alert_health
 from streamlit_app.utils.dataloader import load_data
 
 st.set_page_config(page_title="Utrecht NO2 Forecast", layout="wide")
-cfg = load_config("configs/config_deployment.yaml")
+cfg: Dict[str, Any] = load_config("configs/config_deployment.yaml")
 
 # Auto-refresh (5 mins)
 st_autorefresh(interval=300000, key="data_refresh")
@@ -32,13 +39,13 @@ except Exception as e:
 
 with st.sidebar:
     st.title("Navigation")
-    page = st.radio("Go to", ["Public Dashboard", "Admin Panel"])
+    page: str = st.radio("Go to", ["Public Dashboard", "Admin Panel"])
 
     if page == "Admin Panel":
         if not st.session_state.get("logged_in"):
             st.subheader("Login")
-            user = st.text_input("User")
-            pw = st.text_input("Password", type="password")
+            user: str = st.text_input("User")
+            pw: str = st.text_input("Password", type="password")
             if st.button("Login"):
                 if user == "admin" and pw == "admin":
                     st.session_state["logged_in"] = True

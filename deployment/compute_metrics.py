@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -8,8 +9,21 @@ import pandas as pd
 from src.utils.cfg import load_config
 
 
-def load_data(cfg):
-    """Loads history and all raw predictions."""
+def load_data(cfg: Dict[str, Any]) -> Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]:
+    """Loads historical observations and all raw prediction files.
+
+    Args:
+        cfg (Dict[str, Any]): Configuration dictionary containing file paths
+            for 'history_path' and 'predictions_dir'.
+
+    Returns:
+        Tuple[pd.DataFrame, Dict[str, pd.DataFrame]]: A tuple containing:
+            - df_hist: DataFrame of historical observations.
+            - preds_all: Dictionary mapping model names to their prediction DataFrames.
+
+    Raises:
+        FileNotFoundError: If the history file specified in config does not exist.
+    """
     history_path = cfg["deployment"]["history_path"]
     preds_dir = cfg["deployment"]["predictions_dir"]
     if not os.path.exists(history_path):
@@ -37,13 +51,40 @@ def load_data(cfg):
     return df_hist, preds_all
 
 
-def calculate_smape(y_true, y_pred):
+def calculate_smape(y_true: pd.Series, y_pred: pd.Series) -> np.ndarray:
+    """Calculates the Symmetric Mean Absolute Percentage Error (SMAPE).
+
+    Args:
+        y_true (pd.Series): The ground truth values.
+        y_pred (pd.Series): The predicted values.
+
+    Returns:
+        np.ndarray: An array of SMAPE values (0-100). Returns 0.0 where
+            the denominator is 0.
+    """
     denominator = (np.abs(y_true) + np.abs(y_pred)) / 2.0
     diff = np.abs(y_true - y_pred) / denominator
     return np.where(denominator == 0, 0.0, 100 * diff)
 
 
-def process_metrics(df_hist, preds_all, cfg):
+def process_metrics(
+    df_hist: pd.DataFrame, preds_all: Dict[str, pd.DataFrame], cfg: Dict[str, Any]
+) -> Tuple[Dict[str, Any], Dict[str, List[Dict[str, Any]]]]:
+    """Computes error metrics (RMSE, SMAPE) for horizons and historical performance.
+
+    Aggregates metrics by forecast horizon (step) to generate confidence intervals,
+    and by prediction time to track model stability over time.
+
+    Args:
+        df_hist (pd.DataFrame): DataFrame containing historical ground truth.
+        preds_all (Dict[str, pd.DataFrame]): Dictionary of model predictions.
+        cfg (Dict[str, Any]): Configuration dictionary defining target pollutants.
+
+    Returns:
+        Tuple[Dict[str, Any], Dict[str, List[Dict[str, Any]]]]: A tuple containing:
+            - horizon_out: Metrics aggregated by forecast step (horizon).
+            - history_out: Metrics aggregated by prediction generation time.
+    """
     pollutants = cfg["data"]["target_cols"]
     horizon_out = {p: {} for p in pollutants}
     history_out = {p: [] for p in pollutants}
@@ -127,7 +168,11 @@ def process_metrics(df_hist, preds_all, cfg):
     return horizon_out, history_out
 
 
-def main():
+def main() -> None:
+    """Main execution entry point.
+
+    Loads configuration and data, computes metrics, and saves results to JSON.
+    """
     cfg = load_config("configs/config_deployment.yaml")
     metrics_dir = cfg["deployment"]["metrics_dir"]
 
@@ -135,7 +180,7 @@ def main():
     os.makedirs(metrics_dir, exist_ok=True)
 
     try:
-        df_history, preds_all = load_data()
+        df_history, preds_all = load_data(cfg)
     except FileNotFoundError:
         print("⚠️ History file missing.")
         return

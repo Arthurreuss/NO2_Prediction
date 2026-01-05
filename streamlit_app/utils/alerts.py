@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+from typing import Any, Dict, Optional
 
 import pandas as pd
 import psutil
@@ -10,10 +11,19 @@ import requests
 def send_discord_alert(subject: str, body: str, color: int) -> bool:
     """Sends an alert to a Discord channel via Webhook.
 
+    Note:
+        This function includes a manual DNS resolution patch for specific
+        deployment environments where standard DNS resolution for discord.com
+        might fail.
+
     Args:
-        subject: Title of the embed.
-        body: Main text.
-        color: Decimal color code (Red=15158332, Green=3066993).
+        subject (str): Title of the embed message.
+        body (str): Main text content of the alert.
+        color (int): Decimal color code for the embed sidebar
+            (e.g., Red=15158332, Green=3066993).
+
+    Returns:
+        bool: True if the alert was sent successfully, False otherwise.
     """
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
 
@@ -51,11 +61,21 @@ def send_discord_alert(subject: str, body: str, color: int) -> bool:
 def check_and_alert_health(
     df_history: pd.DataFrame, sys_stats_path: str, alert_file: str
 ) -> None:
-    """Checks system health (aligned with Admin Dashboard metrics) and data freshness.
+    """Checks system health and data freshness, sending alerts if necessary.
+
+    Monitors container resources (RAM, Disk) and pipeline status. Manages
+    alert fatigue by tracking the last alert state in a local file.
 
     Sends:
-    - 🔴 ERROR alert if resources critical or data stale.
-    - 🟢 SUCCESS alert if everything healthy AND new data just arrived.
+    - 🔴 ERROR alert if resources are critical or data is stale.
+    - 🟢 SUCCESS alert if everything is healthy AND new data just arrived.
+
+    Args:
+        df_history (pd.DataFrame): The DataFrame containing historical data.
+            Used to check if data is loaded.
+        sys_stats_path (str): Path to the JSON file containing pipeline execution stats.
+        alert_file (str): Path to the local JSON file used to persist alert state
+            and prevent duplicate notifications.
     """
     issues = []
 
@@ -83,7 +103,7 @@ def check_and_alert_health(
         issues.append(f"**Low Disk Space:** Only {free_gb:.2f} GB free")
 
     data_is_fresh = False
-    last_run_ts = None
+    last_run_ts: Optional[pd.Timestamp] = None
 
     if df_history is None or df_history.empty:
         issues.append("**Data Missing:** History DataFrame is empty")
@@ -91,7 +111,7 @@ def check_and_alert_health(
     if os.path.exists(sys_stats_path):
         try:
             with open(sys_stats_path, "r") as f:
-                stats = json.load(f)
+                stats: Dict[str, Any] = json.load(f)
 
             if stats.get("status") != "success":
                 issues.append(
@@ -119,7 +139,7 @@ def check_and_alert_health(
     else:
         issues.append("**Missing Stats:** 'latest_run.json' not found")
 
-    prev_state = {}
+    prev_state: Dict[str, str] = {}
     if os.path.exists(alert_file):
         try:
             with open(alert_file, "r") as f:

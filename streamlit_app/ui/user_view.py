@@ -1,3 +1,5 @@
+from typing import Dict
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -5,7 +7,23 @@ import streamlit as st
 from utils.styling import get_aqi_category, get_aqi_thresholds
 
 
-def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFrame]):
+def render_user_dashboard(
+    df_history: pd.DataFrame, preds: Dict[str, pd.DataFrame]
+) -> None:
+    """Renders the public-facing dashboard for air quality visualization.
+
+    Displays a current status card with AQI categorization and a time-series plot
+    combining historical observations with model forecasts. The plot includes
+    color-coded background regions corresponding to European Environment Agency
+    (EEA) air quality standards.
+
+    Args:
+        df_history (pd.DataFrame): DataFrame containing historical air quality observations.
+            Must contain a 'time' column and pollutant columns.
+        preds (Dict[str, pd.DataFrame]): Dictionary mapping model names to their
+            respective forecast DataFrames. Each DataFrame must contain 'time'
+            and pollutant columns.
+    """
     col_sel, col_mod = st.columns([1, 2])
 
     map_pol = {
