@@ -22,52 +22,40 @@ def get_dir_size(start_path="."):
 
 
 def show_system_stats(sys_stats_path: str):
-    """Displays real-time container health and pipeline stats."""
+    """Displays real-time container health and pipeline stats with CORRECT Free Tier limits."""
     with st.expander("System & Pipeline Stats", expanded=True):
 
-        # --- LEFT: Real-Time Hugging Face Container ---
+        # --- LEFT: Hugging Face Container (Real-Time) ---
         with st.container(border=True):
-            st.markdown("### ☁️ HF Container (Real-Time)")
+            st.markdown("### ☁️ HF Space (Free Tier)")
 
-            # 1. RAM
+            # 1. RAM: Limit is 16GB
             process = psutil.Process(os.getpid())
             mem_used_mb = process.memory_info().rss / 1024 / 1024
+            hf_ram_limit = 16 * 1024  # 16 GB Hard Limit
+            ram_percent = (mem_used_mb / hf_ram_limit) * 100
 
-            # Detect Container Limit or default to 16GB
-            limit_mb = 16 * 1024
-            try:
-                with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
-                    val = int(f.read().strip())
-                    if val < 10**15:
-                        limit_mb = val / 1024 / 1024
-            except:
-                pass
-
-            ram_percent = (mem_used_mb / limit_mb) * 100
-
-            # 2. Disk
+            # 2. Disk: Limit is 50GB
             app_size_mb = get_dir_size(".")
             disk_percent = (app_size_mb / (50 * 1024)) * 100
 
-            # 3. CPU
+            # 3. CPU: Limit is 2 vCPUs (Standard Free Tier)
+            # psutil.cpu_percent() gives us usage relative to the allocated quota in containers
             cpu_usage = psutil.cpu_percent()
-            cpu_count = psutil.cpu_count()
 
             c1, c2, c3 = st.columns(3)
 
             c1.metric(
-                "App RAM",
-                f"{int(mem_used_mb)} MB",
-                f"{ram_percent:.1f}% of {int(limit_mb/1024)}GB",
+                "RAM Usage", f"{int(mem_used_mb)} MB", f"{ram_percent:.1f}% of 16 GB"
             )
             c2.metric(
-                "App Storage", f"{app_size_mb:.0f} MB", f"{disk_percent:.1f}% of 50GB"
+                "Disk Usage", f"{app_size_mb:.0f} MB", f"{disk_percent:.1f}% of 50 GB"
             )
-            c3.metric("CPU Load", f"{cpu_usage}%", f"of {cpu_count} vCPUs")
+            c3.metric("CPU Load", f"{cpu_usage}%", f"of 2 vCPUs")
 
-        # --- RIGHT: GitHub Pipeline Stats ---
+        # --- RIGHT: GitHub Pipeline (Job Metrics) ---
         with st.container(border=True):
-            st.markdown("### 🚀 GitHub Pipeline (Job Metrics)")  # Changed from "Peak"
+            st.markdown("### 🚀 GitHub Action (Standard Runner)")
 
             if os.path.exists(sys_stats_path):
                 with open(sys_stats_path, "r") as f:
@@ -76,29 +64,24 @@ def show_system_stats(sys_stats_path: str):
 
                 k1, k2, k3 = st.columns(3)
 
-                # 1. RAM (This IS actually Peak)
+                # 1. RAM (Standard Runner is ~7GB)
                 max_ram = peaks.get("max_ram_mb", 0)
-                total_runner_ram = peaks.get("total_ram_mb", 7000)
-                ram_pct = (max_ram / total_runner_ram) * 100
+                gh_ram_limit = 7000  # ~7 GB
+                ram_pct = (max_ram / gh_ram_limit) * 100
 
-                k1.metric(
-                    "Peak RAM",
-                    f"{max_ram:.0f} MB",
-                    f"{ram_pct:.1f}% of {int(total_runner_ram/1024)}GB",
-                )
+                k1.metric("Peak RAM", f"{max_ram:.0f} MB", f"{ram_pct:.1f}% of 7 GB")
 
-                # 2. CPU (This is AVERAGE / Efficiency)
-                avg_cpu_load = peaks.get("cpu_percent", "N/A")
-                runner_cpus = peaks.get("cpu_count", 2)
-
-                # RENAMED from "Peak CPU" to "Avg CPU" to be accurate
-                k2.metric("Avg CPU", f"{avg_cpu_load}", f"of {runner_cpus} vCPUs")
+                # 2. CPU (Standard Runner is 2 vCPUs)
+                avg_cpu = peaks.get("cpu_percent", 0)
+                # If avg_cpu is > 100%, it means we used >1 core.
+                # Max possible is 200% (2 cores).
+                k2.metric("Avg CPU", f"{avg_cpu}%", "of 2 vCPUs")
 
                 # 3. Data
                 k3.metric("New Data", f"{peaks.get('data_size_mb', 0)} MB", "Generated")
 
                 st.caption(
-                    f"Status: **{stats.get('status', 'UNKNOWN').upper()}** | Duration: **{stats.get('duration_seconds', 0)}s** | Updated: **{stats.get('last_run', 'N/A').split(' ')[-1]}**"
+                    f"Status: **{stats.get('status', 'UNKNOWN').upper()}** | Duration: **{stats.get('duration_seconds', 0)}s** | Last Run: **{stats.get('last_run', 'N/A').split(' ')[-1]}**"
                 )
             else:
                 st.warning("⚠️ No pipeline statistics found.")
