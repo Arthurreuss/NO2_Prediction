@@ -57,23 +57,28 @@ def process_metrics(df_hist, preds_all):
         print(f"Processing {pollutant}...")
 
         for model_name, df_pred in preds_all.items():
-            # Business Logic: Skip GRU for non-NO2
+            # Skip GRU for non-NO2 (Business Logic)
             if pollutant != "nitrogen_dioxide" and model_name == "GRU":
                 continue
 
-            # Merge Data (Inner Join matches timestamps)
-            merged = pd.merge(
-                df_pred, df_hist[["time", pollutant]], on="time", how="inner"
-            ).rename(columns={pollutant: "actual"})
+            # Check if model actually predicts this pollutant
+            if pollutant not in df_pred.columns:
+                continue
+
+            # --- FIX: Rename history column BEFORE merge to avoid name collision ---
+            hist_slice = df_hist[["time", pollutant]].rename(
+                columns={pollutant: "actual"}
+            )
+
+            # Merge: df_pred keeps '{pollutant}', hist_slice provides 'actual'
+            merged = pd.merge(df_pred, hist_slice, on="time", how="inner")
 
             if merged.empty:
                 continue
 
-            # Calc Errors
-            merged["sq_error"] = (merged[f"{pollutant}_pred"] - merged["actual"]) ** 2
-            merged["smape"] = calculate_smape(
-                merged["actual"], merged[f"{pollutant}_pred"]
-            )
+            # Calc Errors (Prediction column is just 'pollutant' e.g. 'nitrogen_dioxide')
+            merged["sq_error"] = (merged[pollutant] - merged["actual"]) ** 2
+            merged["smape"] = calculate_smape(merged["actual"], merged[pollutant])
 
             # --- 1. Horizon Metrics (Aggregated by step 1-72) ---
             merged["step"] = (
@@ -136,7 +141,8 @@ def process_metrics(df_hist, preds_all):
                 history_out[pollutant].extend(perf.to_dict(orient="records"))
 
         # Sort history by time after combining models
-        history_out[pollutant].sort(key=lambda x: x["prediction_generated_at"])
+        if history_out[pollutant]:
+            history_out[pollutant].sort(key=lambda x: x["prediction_generated_at"])
 
     return horizon_out, history_out
 
@@ -155,7 +161,7 @@ def main():
 
     print("💾 Saving metrics...")
     with open(f"{METRICS_DIR}/horizon_metrics.json", "w") as f:
-        json.dump(horizon_metrics, f)  # Standard dump works now
+        json.dump(horizon_metrics, f)
 
     with open(f"{METRICS_DIR}/history_metrics.json", "w") as f:
         json.dump(history_metrics, f)
