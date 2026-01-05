@@ -35,33 +35,47 @@ jobs:
         run: |
           START_TIME=$(date +%s)
           
-          uv run python -m deployment.run_inference
+          # Measure PEAK usage using /usr/bin/time
+          # %M = Max Resident Set Size (KB)
+          # %P = CPU Usage percentage
+          /usr/bin/time -f "MAX_RAM_KB=%M\nCPU_PERCENT=%P" -o resource_usage.txt \
+            uv run python -m deployment.run_inference
           
           END_TIME=$(date +%s)
           DURATION=$((END_TIME - START_TIME))
           
-          # Calculate clean stats
-          MEM_AVAILABLE=$(free -h | grep Mem | awk '{print $7}')
+          # Read metrics from the file
+          source resource_usage.txt
+          
+          # Convert KB to MB for cleaner JSON
+          MAX_RAM_MB=$(echo "scale=1; $MAX_RAM_KB / 1024" | bc)
+          
+          # Get Disk Usage of the data folder (Actual Consumption)
+          DATA_SIZE_MB=$(du -sm data/deployment | cut -f1)
+          
+          # Get General System Stats (Context)
           DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
           
           mkdir -p data/deployment
           
-          # FIX: Pass the clean variables (MEM_AVAILABLE, DISK_FREE) 
-          # instead of the raw ones (MEMORY_INFO, DISK_INFO)
           jq -n \
             --arg last_run "$(TZ='Europe/Amsterdam' date +'%Y-%m-%d %H:%M:%S')" \
             --arg duration "$DURATION" \
             --arg status "success" \
-            --arg runner "$RUNNER_OS" \
-            --arg mem_avail "$MEM_AVAILABLE" \
+            --arg max_ram "$MAX_RAM_MB" \
+            --arg cpu_load "$CPU_PERCENT" \
+            --arg disk_used "$DATA_SIZE_MB" \
             --arg disk_free "$DISK_FREE" \
             '{
               last_run: $last_run, 
               duration_seconds: ($duration|tonumber), 
               status: $status, 
-              runner_os: $runner,
-              system_metrics: {
-                memory_available: $mem_avail,
+              peak_metrics: {
+                max_ram_mb: ($max_ram|tonumber),
+                cpu_percent: $cpu_load,
+                data_size_mb: ($disk_used|tonumber)
+              },
+              system_context: {
                 disk_free: $disk_free
               }
             }' > data/deployment/latest_run.json

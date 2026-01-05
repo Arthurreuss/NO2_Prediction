@@ -24,7 +24,6 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
 
     # 2. Current Status Card
     if not df_history.empty:
-        # Get the very latest valid data point
         valid_hist = df_history.dropna(subset=[col_name])
         if not valid_hist.empty:
             latest = valid_hist.iloc[-1]
@@ -42,77 +41,60 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
                 unsafe_allow_html=True,
             )
 
-    # 3. Main Plot
+    # 3. Setup Plot
     fig = go.Figure()
     current_time = pd.Timestamp.now(tz="UTC")
+    cutoff_date = current_time - pd.Timedelta(days=7)
     max_y_val = 0
 
-    # A. Plot History (Last 7 Days)
-    # We load 7 days so the user CAN scroll back, even if we zoom in on today
-    cutoff_date = current_time - pd.Timedelta(days=7)
-
+    # A. Plot History
     if not df_history.empty:
         hist_plot = df_history[df_history["time"] > cutoff_date].copy()
         if not hist_plot.empty and col_name in hist_plot.columns:
             hist_plot = hist_plot.dropna(subset=[col_name]).sort_values("time")
-            # Track max value to scale Y-axis later
             if not hist_plot.empty:
                 max_y_val = max(max_y_val, hist_plot[col_name].max())
 
-            fig.add_trace(
-                go.Scatter(
-                    x=hist_plot["time"],
-                    y=hist_plot[col_name],
-                    name="Observed History",
-                    line=dict(color="white", width=2),
+                fig.add_trace(
+                    go.Scatter(
+                        x=hist_plot["time"],
+                        y=hist_plot[col_name],
+                        name="Observed History",
+                        line=dict(color="white", width=2),
+                        showlegend=True,
+                    )
                 )
-            )
 
-    # B. Plot Forecasts (Models)
+    # B. Plot Models
     colors = ["#00CC96", "#AB63FA", "#FFA15A", "#19D3F3", "#FF6692"]
-
     for i, model_name in enumerate(models):
         df_p = preds.get(model_name)
         if df_p is None or df_p.empty or col_name not in df_p.columns:
             continue
 
-        # Also show last 7 days of predictions to see how they tracked
         df_view = df_p[df_p["time"] > cutoff_date].copy().sort_values("time")
-
         if not df_view.empty:
-            current_max = df_view[col_name].max()
-            if pd.notna(current_max):
-                max_y_val = max(max_y_val, current_max)
+            max_y_val = max(max_y_val, df_view[col_name].max())
 
             fig.add_trace(
                 go.Scatter(
                     x=df_view["time"],
                     y=df_view[col_name],
-                    name=f"{model_name}",
+                    name=model_name,
                     line=dict(color=colors[i % len(colors)], width=3),
+                    showlegend=True,
                 )
             )
 
-    # C. "NOW" Indicator
-    fig.add_vline(
-        x=current_time.timestamp() * 1000,
-        line_width=2,
-        line_dash="dot",
-        line_color="gray",
-        annotation_text="NOW",
-        annotation_position="top left",
-    )
-
-    # D. Background AQI Bands
+    # C. Draw AQI Background Bands
     th = get_aqi_thresholds(col_name)
     bg_colors = ["#50F0E6", "#50CCAA", "#F0E641", "#FF5050", "#960032", "#7D2181"]
 
-    # Calculate a nice Y-axis max (Forecast max OR moderate threshold, whichever is higher)
+    # Calculate sensible Y-axis max
     final_top_limit = max(max_y_val * 1.1, th[2])
 
     prev = 0
     for i in range(5):
-        # Only draw band if it's within visible range to save rendering
         if prev < final_top_limit:
             fig.add_hrect(
                 y0=prev,
@@ -123,8 +105,6 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
                 line_width=0,
             )
         prev = th[i]
-
-    # Final 'Extremely Poor' band
     if prev < final_top_limit:
         fig.add_hrect(
             y0=th[4],
@@ -135,9 +115,37 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
             line_width=0,
         )
 
-    # E. Restore "Start at Now" Zoom Logic
-    zoom_start = current_time
-    zoom_end = current_time + pd.Timedelta(hours=48)
+    # D. Restore AQI Legend (Dummy Traces)
+    # We add invisible points just to get the squares in the legend
+    aqi_labels = [
+        (f"Good (<{th[0]})", bg_colors[0]),
+        (f"Fair ({th[0]}-{th[1]})", bg_colors[1]),
+        (f"Moderate ({th[1]}-{th[2]})", bg_colors[2]),
+        (f"Poor ({th[2]}-{th[3]})", bg_colors[3]),
+        (f"Very Poor ({th[3]}-{th[4]})", bg_colors[4]),
+        (f"Extremely Poor (>{th[4]})", bg_colors[5]),
+    ]
+
+    for label, color in aqi_labels:
+        fig.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="markers",
+                marker=dict(size=10, color=color, symbol="square"),
+                name=label,
+                showlegend=True,
+                hoverinfo="none",
+            )
+        )
+
+    # E. Final Layout
+    fig.add_vline(
+        x=current_time.timestamp() * 1000,
+        line_dash="dot",
+        annotation_text="NOW",
+        line_color="gray",
+    )
 
     fig.update_layout(
         height=600,
@@ -145,18 +153,17 @@ def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFram
         xaxis_title="Time (UTC)",
         yaxis_title="µg/m³",
         yaxis_range=[0, final_top_limit],
-        # THIS IS THE KEY RESTORATION:
         xaxis=dict(
             type="date",
-            rangeslider=dict(visible=True),  # The slider at the bottom
-            range=[zoom_start, zoom_end],  # Default view: Now -> +48h
+            rangeslider=dict(visible=True),
+            range=[current_time, current_time + pd.Timedelta(hours=48)],
         ),
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
     st.info(
         f"ℹ️ Guidelines based on European Environment Agency (EEA) standards for {label}."
     )
