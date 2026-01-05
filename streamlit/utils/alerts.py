@@ -1,55 +1,55 @@
 import json
 import os
-import smtplib
-from email.message import EmailMessage
 
 import pandas as pd
 import psutil
+import requests
 
 import streamlit as st
 
 
-def send_alert_email(subject: str, body: str) -> bool:
-    """Sends an email alert using SMTP credentials from environment variables.
+def send_discord_alert(subject: str, body: str) -> bool:
+    """Sends an alert to a Discord channel via Webhook.
 
     Args:
-        subject: The subject line of the email.
-        body: The plain text body content of the email.
+        subject: The title/subject of the alert.
+        body: The detailed body content.
 
     Returns:
-        True if the email was sent successfully, False otherwise.
+        True if the request was successful, False otherwise.
     """
-    user = os.environ.get("EMAIL_USER")
-    password = os.environ.get("EMAIL_PASSWORD")
-    to_email = os.environ.get("EMAIL_TO")
-    smtp_server = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", 465))
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
 
-    if not user or not password or not to_email:
-        print("Email credentials missing. Skipping alert email.")
-        return
+    if not webhook_url:
+        print("Discord Webhook URL missing. Skipping alert.")
+        return False
 
-    msg = EmailMessage()
-    msg.set_content(body)
-    msg["Subject"] = subject
-    msg["From"] = user
-    msg["To"] = to_email
+    payload = {
+        "username": "System Health Bot",
+        "embeds": [
+            {
+                "title": f"🚨 {subject}",
+                "description": body,
+                "color": 15158332,  # Red color
+                "footer": {"text": "Streamlit Dashboard Monitor"},
+            }
+        ],
+    }
 
     try:
-        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
-            server.login(user, password)
-            server.send_message(msg)
-        print("Alert email sent successfully.")
+        response = requests.post(webhook_url, json=payload)
+        response.raise_for_status()
+        print("Discord alert sent successfully.")
         return True
     except Exception as e:
-        print(f"Failed to send alert email: {e}")
+        print(f"Failed to send Discord alert: {e}")
         return False
 
 
 def check_and_alert_health(
     df_history: pd.DataFrame, sys_stats_path: str, alert_file: str
 ) -> None:
-    """Checks system resources and data pipeline health, sending alerts if necessary.
+    """Checks system resources and data pipeline health, sending Discord alerts if necessary.
 
     Monitors RAM usage, disk space, and data freshness. Enforces a cooldown period
     to prevent spamming alerts.
@@ -59,18 +59,7 @@ def check_and_alert_health(
         sys_stats_path: Path to the JSON file containing pipeline run statistics.
         alert_file: Path to the JSON file used to store/check alert cooldown timestamps.
     """
-    with st.expander("Admin Controls", expanded=True):
-        if st.button("Reset Email Cooldown"):
-            if os.path.exists(alert_file):
-                os.remove(alert_file)
-                st.success("Cooldown reset! You can now trigger a new email.")
-                st.rerun()
-            else:
-                st.info("No active cooldown found.")
-
     issues = []
-
-    issues.append("TEST: This is a forced test alert.")
 
     mem = psutil.virtual_memory()
     if mem.percent > 90:
@@ -103,6 +92,8 @@ def check_and_alert_health(
         except Exception:
             pass
 
+    issues.append("TEST: This is a forced test alert to verify Discord.")
+
     if issues:
         should_send = True
         cooldown_msg = ""
@@ -129,15 +120,20 @@ def check_and_alert_health(
 
         if should_send:
             subject = f"Dashboard Alert: {len(issues)} Issues Detected"
-            body = "The following issues were detected:\n\n" + "\n".join(issues)
-            success = send_alert_email(subject, body)
+            body = "**The following issues were detected:**\n" + "\n".join(
+                [f"- {i}" for i in issues]
+            )
+
+            success = send_discord_alert(subject, body)
 
             if success:
                 with open(alert_file, "w") as f:
                     json.dump({"last_sent": now_ams.isoformat()}, f)
-                st.toast("📧 Alert sent to admin!")
+                st.toast("Discord notification sent to admin!")
+            else:
+                st.error("Failed to send Discord notification.")
         elif not should_send:
-            st.caption("ℹ️ Email suppressed by cooldown.")
+            st.caption("ℹ️ Notification suppressed by cooldown.")
 
     else:
         st.success("System Status: Healthy")
