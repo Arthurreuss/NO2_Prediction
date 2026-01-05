@@ -21,7 +21,7 @@ def send_discord_alert(subject: str, body: str) -> bool:
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
 
     if not webhook_url:
-        print("Discord Webhook URL missing. Skipping alert.")
+        print("Discord Webhook URL missing. Skipping alert.", flush=True)
         return False
 
     payload = {
@@ -39,10 +39,10 @@ def send_discord_alert(subject: str, body: str) -> bool:
     try:
         response = requests.post(webhook_url, json=payload)
         response.raise_for_status()
-        print("Discord alert sent successfully.")
+        print("Discord alert sent successfully.", flush=True)
         return True
     except Exception as e:
-        print(f"Failed to send Discord alert: {e}")
+        print(f"Failed to send Discord alert: {e}", flush=True)
         return False
 
 
