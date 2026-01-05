@@ -5,222 +5,104 @@ import streamlit as st
 from utils.styling import get_aqi_category, get_aqi_thresholds
 
 
-def render_user_dashboard(
-    df_history: pd.DataFrame, preds: dict[str, pd.DataFrame]
-) -> None:
-    """Renders the main user dashboard for air quality monitoring and forecasting.
+def render_user_dashboard(df_history: pd.DataFrame, preds: dict[str, pd.DataFrame]):
+    col_sel, col_mod = st.columns([1, 2])
 
-    Displays an interactive interface allowing users to select specific pollutants
-    and forecasting models. Visualizes historical data alongside model predictions
-    using Plotly, with background color bands representing EEA Air Quality Index
-    (AQI) thresholds. Also displays a 'Current Status' card based on the most
-    recent historical observation.
+    map_pol = {
+        "Nitrogen Dioxide (NO₂)": "nitrogen_dioxide",
+        "Ozone (O₃)": "ozone",
+        "PM10": "pm10",
+        "PM2.5": "pm2_5",
+    }
+    label = col_sel.selectbox("Select Pollutant", list(map_pol.keys()))
+    col_name = map_pol[label]
 
-    Args:
-        df_history: A DataFrame containing historical air quality data with
-            timestamp and pollutant columns.
-        preds: A dictionary mapping model names (e.g., 'XGBoost', 'LSTM') to
-            DataFrames containing their respective prediction data.
-    """
-    col_sel, col_models = st.columns([1, 2])
-
-    with col_sel:
-        pollutant_map = {
-            "Nitrogen Dioxide (NO₂)": "nitrogen_dioxide",
-            "Ozone (O₃)": "ozone",
-            "Particulate Matter (PM10)": "pm10",
-            "Fine Particles (PM2.5)": "pm2_5",
-        }
-        selected_label = st.selectbox("Select Pollutant", list(pollutant_map.keys()))
-        target_col = pollutant_map[selected_label]
-
-    available_models = list(preds.keys())
-
-    with col_models:
-        selected_models = st.multiselect(
-            "Select Forecasting Models",
-            options=available_models,
-            default=available_models,
-        )
-
-    st.markdown(
-        f"Monitor and forecast **{selected_label}** levels to plan your outdoor activities."
+    models = col_mod.multiselect(
+        "Models", list(preds.keys()), default=list(preds.keys())
     )
 
-    if not df_history.empty and target_col in df_history.columns:
-        valid_history = df_history.dropna(subset=[target_col])
-        if not valid_history.empty:
-            latest = valid_history.iloc[-1]
-            val = latest[target_col]
-            cat, color, desc = get_aqi_category(val, target_col)
+    # --- 1. Current Status Card ---
+    if not df_history.empty:
+        latest = df_history.dropna(subset=[col_name]).iloc[-1]
+        val = latest[col_name]
+        cat, color, desc = get_aqi_category(val, col_name)
 
-            st.markdown(
-                f"""
-            <div style="background-color: {color}; padding: 20px; border-radius: 10px; color: white; text-align: center; margin-bottom: 25px;">
-                <h3 style="margin:0;">Current Status: {cat}</h3>
-                <h1 style="margin:0; font-size: 3em;">{val:.1f} µg/m³</h1>
-                <p style="margin:0;">{desc}</p>
+        st.markdown(
+            f"""
+            <div style="background-color:{color};padding:20px;border-radius:10px;color:white;text-align:center;margin-bottom:20px">
+                <h3 style="margin:0">Current: {cat}</h3>
+                <h1 style="margin:0;font-size:3em">{val:.1f} µg/m³</h1>
+                <p style="margin:0">{desc}</p>
             </div>
             """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.warning(f"No recent historical data available for {selected_label}")
-    else:
-        st.info("Waiting for historical data...")
+            unsafe_allow_html=True,
+        )
 
-    st.subheader(f"{selected_label} Forecast vs. History")
+    # --- 2. Main Forecast Plot ---
     fig = go.Figure()
-    max_data_value = 0
-    current_time = pd.Timestamp.now(tz="UTC")
+    curr_time = pd.Timestamp.now(tz="UTC")
 
-    if not df_history.empty and target_col in df_history.columns:
-        cutoff_date = current_time - pd.Timedelta(days=7)
-        hist_plot = df_history[df_history["time"] > cutoff_date].copy()
+    # Plot History (Last 7 days)
+    hist_view = df_history[df_history["time"] > (curr_time - pd.Timedelta(days=7))]
+    fig.add_trace(
+        go.Scatter(
+            x=hist_view["time"],
+            y=hist_view[col_name],
+            name="Observed",
+            line=dict(color="white", width=2),
+        )
+    )
 
-        if not hist_plot.empty:
-            hist_plot = hist_plot.dropna(subset=[target_col])
-            hist_plot = hist_plot.sort_values("time")
-
-            if not hist_plot.empty:
-                current_max = hist_plot[target_col].max()
-                if pd.notna(current_max):
-                    max_data_value = max(max_data_value, current_max)
-
+    # Plot Forecasts
+    colors = ["#00CC96", "#AB63FA", "#FFA15A", "#19D3F3"]
+    for i, m in enumerate(models):
+        if col_name in preds[m].columns:
+            # Show forecast starting from yesterday (continuity)
+            df_p = preds[m][preds[m]["time"] > (curr_time - pd.Timedelta(days=1))]
+            if not df_p.empty:
                 fig.add_trace(
                     go.Scatter(
-                        x=hist_plot["time"],
-                        y=hist_plot[target_col],
-                        name="Observed History",
-                        line=dict(color="white", width=2),
-                        legendgroup="data",
+                        x=df_p["time"],
+                        y=df_p[col_name],
+                        name=m,
+                        line=dict(color=colors[i % 4], width=3),
                     )
                 )
 
-    colors = ["#00CC96", "#AB63FA", "#FFA15A", "#19D3F3", "#FF6692"]
-    valid_models_found = 0
-
-    for i, (model_name, df_p) in enumerate(preds.items()):
-        if model_name not in selected_models:
-            continue
-
-        if target_col not in df_p.columns:
-            continue
-
-        if not df_p.empty:
-            start_window = current_time - pd.Timedelta(days=7)
-            df_view = df_p[df_p["time"] > start_window].copy()
-            df_view = df_view.sort_values("time")
-
-            if not df_view.empty:
-                current_max = df_view[target_col].max()
-                if pd.notna(current_max):
-                    max_data_value = max(max_data_value, current_max)
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=df_view["time"],
-                        y=df_view[target_col],
-                        name=f"Forecast ({model_name})",
-                        line=dict(color=colors[i % len(colors)], width=3),
-                        legendgroup="data",
-                    )
-                )
-                valid_models_found += 1
-
-    if valid_models_found == 0 and len(selected_models) > 0:
-        st.caption(f"No valid data found for the selected models.")
-    elif len(selected_models) == 0:
-        st.caption("Select at least one model to see the forecast.")
-
-    current_time_ms = current_time.timestamp() * 1000
-
+    # NOW Line
     fig.add_vline(
-        x=current_time_ms,
-        line_width=2,
-        line_dash="dot",
-        line_color="gray",
-        annotation_text="NOW",
-        annotation_position="top left",
+        x=curr_time.timestamp() * 1000, line_dash="dot", annotation_text="NOW"
     )
 
-    th = get_aqi_thresholds(target_col)
-    OPACITY = 0.15
-
-    colors_aqi = [
-        "#50F0E6",  # Good (Turquoise)
-        "#50CCAA",  # Fair (Greenish Teal)
-        "#F0E641",  # Moderate (Yellow)
-        "#FF5050",  # Poor (Red)
-        "#960032",  # Very poor (Dark Red)
-        "#7D2181",  # Extremely poor (Purple)
-    ]
-
-    previous_th = 0
-    for i in range(5):
+    # AQI Bands
+    th = get_aqi_thresholds(col_name)
+    bg_colors = ["#50F0E6", "#50CCAA", "#F0E641", "#FF5050", "#960032", "#7D2181"]
+    prev = 0
+    for i, limit in enumerate(th):
         fig.add_hrect(
-            y0=previous_th,
-            y1=th[i],
-            fillcolor=colors_aqi[i],
-            opacity=OPACITY,
-            line_width=0,
+            y0=prev,
+            y1=limit,
+            fillcolor=bg_colors[i],
+            opacity=0.15,
             layer="below",
+            line_width=0,
         )
-        previous_th = th[i]
-
+        prev = limit
+    # Extremes band
     fig.add_hrect(
-        y0=th[4],
-        y1=th[4] * 5,
-        fillcolor=colors_aqi[5],
-        opacity=OPACITY,
-        line_width=0,
+        y0=th[-1],
+        y1=th[-1] * 5,
+        fillcolor=bg_colors[-1],
+        opacity=0.15,
         layer="below",
+        line_width=0,
     )
-
-    aqi_legend_items = [
-        (f"Good (<{th[0]})", colors_aqi[0]),
-        (f"Fair ({th[0]}-{th[1]})", colors_aqi[1]),
-        (f"Moderate ({th[1]}-{th[2]})", colors_aqi[2]),
-        (f"Poor ({th[2]}-{th[3]})", colors_aqi[3]),
-        (f"Very Poor ({th[3]}-{th[4]})", colors_aqi[4]),
-        (f"Extremely Poor (>{th[4]})", colors_aqi[5]),
-    ]
-
-    for label, color in aqi_legend_items:
-        fig.add_trace(
-            go.Scatter(
-                x=[None],
-                y=[None],
-                mode="markers",
-                marker=dict(size=10, color=color, symbol="square"),
-                name=label,
-                legendgroup="aqi",
-                showlegend=True,
-            )
-        )
-
-    calculated_top = max_data_value * 1.1
-    minimum_view = th[2]
-    final_top_limit = max(calculated_top, minimum_view)
-
-    zoom_start = current_time
-    zoom_end = current_time + pd.Timedelta(hours=48)
 
     fig.update_layout(
-        height=600,
-        xaxis_title="Time (UTC)",
-        yaxis_title=f"{selected_label} (µg/m³)",
-        yaxis_range=[0, final_top_limit],
-        xaxis=dict(
-            type="date", rangeslider=dict(visible=True), range=[zoom_start, zoom_end]
-        ),
-        margin=dict(l=20, r=20, t=40, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=500,
+        xaxis_title="Time",
+        yaxis_title="µg/m³",
         hovermode="x unified",
-        dragmode="pan",
+        margin=dict(t=10, l=10, r=10, b=10),
     )
-
-    st.plotly_chart(fig, width="stretch")
-    st.info(
-        f"ℹ️ Guidelines based on European Environment Agency (EEA) standards for {selected_label}."
-    )
+    st.plotly_chart(fig, use_container_width=True)

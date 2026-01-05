@@ -1,6 +1,6 @@
 import os
 import traceback
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any, Dict, Tuple
 
 import mlflow

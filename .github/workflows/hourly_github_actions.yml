@@ -35,7 +35,7 @@ jobs:
         run: |
           START_TIME=$(date +%s)
           
-          uv run python -m deployment.deployment_pipeline
+          uv run python -m deployment.run_inference
           
           END_TIME=$(date +%s)
           DURATION=$((END_TIME - START_TIME))
@@ -68,7 +68,7 @@ jobs:
           
           cat data/deployment/latest_run.json
 
-      - name: Calculate Dashboard Metrics (RAM Heavy Task)
+      - name: Calculate Dashboard Metrics
         run: |
           uv run python deployment/compute_metrics.py
 
