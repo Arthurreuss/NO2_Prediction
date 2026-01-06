@@ -46,12 +46,20 @@ def render_user_dashboard(
             val = latest[col_name]
             cat, color, desc = get_aqi_category(val, col_name)
 
+            h = color.lstrip("#")
+            try:
+                r, g, b = tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
+                luminance = 0.299 * r + 0.587 * g + 0.114 * b
+                text_col = "#000000" if luminance > 140 else "#FFFFFF"
+            except ValueError:
+                text_col = "#FFFFFF"
+
             st.markdown(
                 f"""
-                <div style="background-color:{color};padding:20px;border-radius:10px;color:white;text-align:center;margin-bottom:25px">
+                <div style="background-color:{color};padding:20px;border-radius:10px;color:{text_col};text-align:center;margin-bottom:25px">
                     <h3 style="margin:0">Current Status: {cat}</h3>
                     <h1 style="margin:0;font-size:3em">{val:.1f} µg/m³</h1>
-                    <p style="margin:0">{desc}</p>
+                    <p style="margin:0;opacity:0.9">{desc}</p>
                 </div>
             """,
                 unsafe_allow_html=True,
@@ -173,8 +181,8 @@ def render_user_dashboard(
             y=0.99,
             xanchor="right",
             x=0.99,
-            bgcolor="rgba(255,255,255,0.8)",
-            bordercolor="rgba(0,0,0,0.1)",
+            bgcolor="rgba(0,0,0,0)",
+            bordercolor="rgba(0,0,0,0)",
             borderwidth=1,
         ),
         hovermode="x unified",
