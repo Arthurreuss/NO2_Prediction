@@ -38,14 +38,14 @@ jobs:
           # Measure PEAK usage using /usr/bin/time
           # %M = Max Resident Set Size (KB)
           # %P = CPU Usage percentage
-          /usr/bin/time -f "MAX_RAM_KB=%M\nCPU_PERCENT=%P" -o resource_usage.txt \
+          /usr/bin/time -f "MAX_RAM_KB=%M\nCPU_PERCENT=%P" -o data/deployment/resource_usage.txt \
             uv run python -m deployment.run_inference
           
           END_TIME=$(date +%s)
           DURATION=$((END_TIME - START_TIME))
           
           # Read metrics from the file
-          source resource_usage.txt
+          source data/deployment/resource_usage.txt
           
           # Convert KB to MB for cleaner JSON
           MAX_RAM_MB=$(echo "scale=1; $MAX_RAM_KB / 1024" | bc)
@@ -81,6 +81,7 @@ jobs:
             }' > data/deployment/latest_run.json
           
           cat data/deployment/latest_run.json
+          rm data/deployment/resource_usage.txt
 
       - name: Calculate Dashboard Metrics
         run: |
