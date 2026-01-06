@@ -93,22 +93,7 @@ pip install -r requirements.txt
 
 ```
 
-### 2. Environment Setup
-
-Create a `.env` file in the root directory to store your credentials (only needed for deployment):
-
-```env
-MLFLOW_TRACKING_URI=https://dagshub.com/username/repo.mlflow
-MLFLOW_TRACKING_USERNAME=your_username
-MLFLOW_TRACKING_PASSWORD=your_token
-DISCORD_WEBHOOK_URL=your_webhook_url
-HF_ACCESS_TOKEN=token
-HF_USERNAME=username
-HF_SPACE_NAME=NO2_Prediction
-
-```
-
-### 3. Training Pipeline
+### 2. Training Pipeline
 
 Before training, run the preprocessing pipeline to clean and prepare the data:
 
@@ -128,7 +113,7 @@ python -m scripts.run_model.run_gru
 
 ```
 
-### 4. Local Dashboard
+### 3. Local Dashboard
 
 Launch the Streamlit app locally to view predictions and model performance:
 
@@ -137,11 +122,38 @@ streamlit run streamlit_app/app.py
 
 ```
 
+Here is the formatted section, structured to clearly distinguish between the secrets needed for GitHub Actions and those needed for the Hugging Face Space.
+
 ### 5. Deployment
 
-Deployment consists of two stages: promoting models to the remote registry and automating inference via GitHub Actions.
+Deployment consists of two stages: configuring your environment secrets, promoting models to the remote registry, and automating inference via GitHub Actions.
 
-#### A. Model Migration
+#### A. Secrets Configuration
+
+To enable the automated pipeline, you must set up secrets in two locations:
+
+**1. GitHub Repository Secrets**
+Go to **Settings > Secrets and variables > Actions** in your GitHub repository and add the following. These allow the runner to fetch models from DagsHub and push results to Hugging Face.
+
+```ini
+MLFLOW_TRACKING_URI=https://dagshub.com/username/repo.mlflow
+MLFLOW_TRACKING_USERNAME=your_username
+MLFLOW_TRACKING_PASSWORD=your_token
+HF_ACCESS_TOKEN=token
+HF_USERNAME=username
+HF_SPACE_NAME=NO2_Prediction
+
+```
+
+**2. Hugging Face Space Secrets**
+Go to **Settings** in your Hugging Face Space and add this secret. This allows the hosted Streamlit dashboard to send health alerts.
+
+```ini
+DISCORD_WEBHOOK_URL=your_webhook_url
+
+```
+
+#### B. Model Migration
 
 Run the migration script to promote your locally trained models to the remote DagsHub registry.
 
@@ -152,7 +164,7 @@ uv run python -m deployment.migration.migrate
 
 ```
 
-#### B. Automated Architecture (CI/CD)
+#### C. Automated Architecture (CI/CD)
 
 This project uses a lightweight, automated deployment strategy to minimize frontend resource usage.
 
@@ -160,9 +172,8 @@ This project uses a lightweight, automated deployment strategy to minimize front
 * **Pre-computed Metrics:** All performance metrics are calculated within the GitHub runner, ensuring the hosted application remains fast and lightweight.
 * **Live Visualization:** Updated predictions and metrics are pushed directly to **Hugging Face**, where the Streamlit app simply visualizes the data.
 
-**How to Deploy Yourself:**
+#### D. How to Deploy Yourself
 
 1. Create a **Hugging Face Space**.
-2. Update the GitHub repository secrets with your Hugging Face credentials.
-3. The workflow in `.github/workflows` will automatically handle hourly inference and data syncing.Deployment Architecture
-
+2. Update your **GitHub Repository Secrets** and **Hugging Face Space Secrets** as listed in step A.
+3. The workflow in `.github/workflows` will automatically handle hourly inference and data syncing.
