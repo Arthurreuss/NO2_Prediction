@@ -82,7 +82,7 @@ def render_user_dashboard(
                         x=hist_plot["time"],
                         y=hist_plot[col_name],
                         name="Observed History",
-                        line=dict(color="white", width=2),
+                        line=dict(color="gray", width=2),
                         showlegend=True,
                     )
                 )
