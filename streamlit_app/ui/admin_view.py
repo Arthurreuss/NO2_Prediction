@@ -131,9 +131,21 @@ def render_admin_dashboard(
         st.markdown(f"--- \n### {label}")
 
         if col in horizon_metrics:
+            st.caption("Horizon Analysis (Average Error per Step)")
             tab1, tab2 = st.tabs(["RMSE (Error)", "SMAPE (%)"])
 
             with tab1:
+                models = list(horizon_metrics[col].keys())
+                if models:
+                    cols = st.columns(len(models))
+                    for idx, m in enumerate(models):
+                        data = horizon_metrics[col][m]
+                        if data:
+                            df_m = pd.DataFrame(data)
+                            df_m = df_m[df_m["step"] > 0]
+                            avg_rmse = df_m["RMSE_mean"].mean()
+                            cols[idx].metric(f"{m} Avg", f"{avg_rmse:.2f}")
+
                 show_ci = st.toggle(
                     f"Show Confidence Intervals ({col})", value=False, key=f"ci_{col}"
                 )
@@ -145,6 +157,8 @@ def render_admin_dashboard(
                     if not data:
                         continue
                     df = pd.DataFrame(data)
+                    df = df[df["step"] > 0]
+
                     color = colors[i % len(colors)]
 
                     fig.add_trace(
@@ -180,10 +194,22 @@ def render_admin_dashboard(
                 st.plotly_chart(fig, width="stretch")
 
             with tab2:
+                models = list(horizon_metrics[col].keys())
+                if models:
+                    cols = st.columns(len(models))
+                    for idx, m in enumerate(models):
+                        data = horizon_metrics[col][m]
+                        if data:
+                            df_m = pd.DataFrame(data)
+                            df_m = df_m[df_m["step"] > 0]
+                            avg_smape = df_m["SMAPE_mean"].mean()
+                            cols[idx].metric(f"{m} Avg", f"{avg_smape:.1f}%")
+
                 fig = go.Figure()
                 for m, data in horizon_metrics[col].items():
                     if data:
                         df = pd.DataFrame(data)
+                        df = df[df["step"] > 0]
                         fig.add_trace(
                             go.Scatter(x=df["step"], y=df["SMAPE_mean"], name=m)
                         )
@@ -196,16 +222,35 @@ def render_admin_dashboard(
                 st.plotly_chart(fig, width="stretch")
 
         if col in history_metrics and history_metrics[col]:
+            st.caption("Model Stability (Performance over Time)")
             df_perf = pd.DataFrame(history_metrics[col])
-            fig = px.line(
-                df_perf,
-                x="prediction_generated_at",
-                y="RMSE",
-                color="Model",
-                markers=True,
-                title=f"Model Stability ({label})",
-            )
-            st.plotly_chart(fig, width="stretch")
+
+            stab_tab1, stab_tab2 = st.tabs(["RMSE (Error)", "SMAPE (%)"])
+
+            with stab_tab1:
+                fig = px.line(
+                    df_perf,
+                    x="prediction_generated_at",
+                    y="RMSE",
+                    color="Model",
+                    markers=True,
+                    title=f"Stability: RMSE over Time ({label})",
+                )
+                st.plotly_chart(fig, width="stretch")
+
+            with stab_tab2:
+                if "SMAPE" in df_perf.columns:
+                    fig = px.line(
+                        df_perf,
+                        x="prediction_generated_at",
+                        y="SMAPE",
+                        color="Model",
+                        markers=True,
+                        title=f"Stability: SMAPE over Time ({label})",
+                    )
+                    st.plotly_chart(fig, width="stretch")
+                else:
+                    st.info("SMAPE history not available.")
 
     with st.expander("Inspect Raw Data"):
         st.subheader("History (Last 5)")
