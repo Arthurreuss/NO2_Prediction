@@ -143,14 +143,14 @@ def render_user_dashboard(
         (f"Extremely Poor (>{th[4]})", bg_colors[5]),
     ]
 
-    for label, color in aqi_labels:
+    for aqi_label, color in aqi_labels:
         fig.add_trace(
             go.Scatter(
                 x=[None],
                 y=[None],
                 mode="markers",
                 marker=dict(size=10, color=color, symbol="square"),
-                name=label,
+                name=aqi_label,
                 showlegend=True,
                 hoverinfo="none",
             )
