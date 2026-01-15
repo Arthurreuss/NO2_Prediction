@@ -1,10 +1,10 @@
 {
-  "last_run": "2026-01-15 14:06:09",
-  "duration_seconds": 29,
+  "last_run": "2026-01-15 14:51:05",
+  "duration_seconds": 40,
   "status": "success",
   "peak_metrics": {
-    "max_ram_mb": 920.9,
-    "cpu_percent": "37%",
+    "max_ram_mb": 921.3,
+    "cpu_percent": "27%",
     "data_size_mb": 2
   },
   "system_context": {
