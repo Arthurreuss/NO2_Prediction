@@ -1,13 +1,13 @@
 {
-  "last_run": "2026-02-06 00:35:22",
-  "duration_seconds": 30,
+  "last_run": "2026-02-06 03:51:53",
+  "duration_seconds": 37,
   "status": "success",
   "peak_metrics": {
-    "max_ram_mb": 936.6,
-    "cpu_percent": "35%",
+    "max_ram_mb": 936.4,
+    "cpu_percent": "29%",
     "data_size_mb": 5
   },
   "system_context": {
-    "disk_free": "85G"
+    "disk_free": "15G"
   }
 }
